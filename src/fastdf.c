@@ -157,6 +157,9 @@ int main(int argc, char *argv[]) {
 
         /* Compute initial phase space density */
         p->f_i = f_i;
+
+        /* Compute the magnitude of the initial velocity */
+        p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
     }
 
     printf("Done with pre-initial conditions.\n");
@@ -243,7 +246,7 @@ int main(int argc, char *argv[]) {
             accelCIC(box, N, BoxLen, p->x, acc);
 
             /* Fetch the relativistic correction factors */
-            double relat_kick_correction = relativity_kick(p->v, a, &us);
+            double relat_kick_correction = relativity_kick(p->v_i, a, &us);
             double relat_drift_correction = relativity_drift(p->v, a, &us);
 
             /* Compute the overall kick and drift step sizes */

@@ -20,11 +20,11 @@
 #ifndef RELATIVITY_H
 #define RELATIVITY_H
 
-static inline double relativity_kick(double *V, double a, struct units *us) {
+static inline double relativity_kick(double V_i, double a, struct units *us) {
     double c = us->SpeedOfLight;
-    double v = hypot(V[0], hypot(V[1], V[2])) / (a * c);
+    double v_i = V_i / (a * c);
 
-    return (2 * v * v + 1.0) / hypot(v, 1.);
+    return (2 * v_i * v_i + 1.0) / hypot(v_i, 1.);
 }
 
 static inline double relativity_drift(double *V, double a, struct units *us) {
