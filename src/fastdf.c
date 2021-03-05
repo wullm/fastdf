@@ -111,6 +111,10 @@ int main(int argc, char *argv[]) {
     fft_normalize_r2c(fbox, N, BoxLen);
     fftw_destroy_plan(r2c);
 
+    /* Allocate another pair of boxes for the anisotropic stress */
+    fftw_complex *fbox2 = malloc(N*N*N*sizeof(fftw_complex));
+    double *box2 = malloc(N*N*N*sizeof(double));
+
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
 
@@ -210,12 +214,17 @@ int main(int argc, char *argv[]) {
 
         /* The indices of the potential transfer function */
         int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
+        int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_phi, tau_index, u_tau};
+        struct spline_params sp2 = {&spline, index_psi, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
+
+        /* Apply the transfer function (read only fgrf, output into fbox) */
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -223,14 +232,29 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
+        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
+        fft_execute(c2r2);
+        fft_normalize_c2r(box2, N, BoxLen);
+        fftw_destroy_plan(c2r2);
+
         /* Multiply by the potential factor */
         for (int i=0; i<N*N*N; i++) {
             box[i] *= potential_factor;
+            box2[i] *= potential_factor;
+        }
+
+        /* Compute the anisotropic stress (chi = phi - psi) */
+        for (int i=0; i<N*N*N; i++) {
+            box2[i] = box[i] - box2[i];
         }
 
         char pot_fname[50];
         sprintf(pot_fname, "phi_%d.hdf5", ITER);
         writeFieldFile(box, N, BoxLen, pot_fname);
+
+        char chi_fname[50];
+        sprintf(chi_fname, "chi_%d.hdf5", ITER);
+        writeFieldFile(box2, N, BoxLen, chi_fname);
 
         /* Fetch the cosmological kick and drift factors */
         double kick_factor = get_kick_factor(&cosmo, log(a), log(a_next));
@@ -245,18 +269,28 @@ int main(int argc, char *argv[]) {
             double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
 
+            /* Get the acceleration from the anistropic stress chi */
+            double acc_chi[3];
+            accelCIC(box2, N, BoxLen, p->x, acc_chi);
+
+            /* Also fetch the values of the potential and stress */
+            double phi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]) * us.GravityG;
+            double chi = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]) * us.GravityG;
+
             /* Fetch the relativistic correction factors */
             double relat_kick_correction = relativity_kick(p->v_i, a, &us);
             double relat_drift_correction = relativity_drift(p->v, a, &us);
+            double relat_extra_correction = relativity_extra(p->v, a, &us);
+            double relat_stress_correction = 1./(relat_drift_correction * relat_kick_correction);
 
             /* Compute the overall kick and drift step sizes */
             double kick = kick_factor * relat_kick_correction * us.GravityG;
             double drift = drift_factor * relat_drift_correction;
 
             /* Execute kick */
-            p->v[0] += acc[0] * kick;
-            p->v[1] += acc[1] * kick;
-            p->v[2] += acc[2] * kick;
+            p->v[0] += (acc[0] - acc_chi[0] * relat_stress_correction) * kick;
+            p->v[1] += (acc[1] - acc_chi[1] * relat_stress_correction) * kick;
+            p->v[2] += (acc[2] - acc_chi[2] * relat_stress_correction) * kick;
 
             /* Execute delta-f step */
             double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
@@ -265,9 +299,9 @@ int main(int argc, char *argv[]) {
             I_df += w*w;
 
             /* Execute drift */
-            p->x[0] += p->v[0] * drift;
-            p->x[1] += p->v[1] * drift;
-            p->x[2] += p->v[2] * drift;
+            p->x[0] += p->v[0] * drift * (1 - (3 - relat_extra_correction) * phi + chi);
+            p->x[1] += p->v[1] * drift * (1 - (3 - relat_extra_correction) * phi + chi);
+            p->x[2] += p->v[2] * drift * (1 - (3 - relat_extra_correction) * phi + chi);
         }
 
         /* Step forward */
@@ -283,6 +317,8 @@ int main(int argc, char *argv[]) {
     free(box);
     free(fgrf);
     free(fbox);
+    free(box2);
+    free(fbox2);
 
     /* Final operations before writing the particles to disk */
     for (int i=0; i<pars.NumPartGenerate; i++) {

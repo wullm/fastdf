@@ -34,4 +34,12 @@ static inline double relativity_drift(double *V, double a, struct units *us) {
     return 1.0 / hypot(v, 1.);
 }
 
+static inline double relativity_extra(double *V, double a, struct units *us) {
+    double c = us->SpeedOfLight;
+    double v = hypot(V[0], hypot(V[1], V[2])) / (a * c);
+    double v2 = v * v;
+
+    return v2 / (v2 + 1);
+}
+
 #endif
