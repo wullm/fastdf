@@ -145,7 +145,10 @@ int main(int argc, char *argv[]) {
         long long id = i + pars.FirstID;
 
         /* Generate random particle velocity and position */
-        init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
+        double u = init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
+
+        if (i==0)
+        printf("First random velocity = %f\n", u);
 
         /* Compute the momentum in eV */
         const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
