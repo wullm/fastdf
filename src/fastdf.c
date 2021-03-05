@@ -286,16 +286,16 @@ int main(int argc, char *argv[]) {
         p->x[1] = fwrap(p->x[1], BoxLen);
         p->x[2] = fwrap(p->x[2], BoxLen);
 
-        /* Convert to peculiar velocities */
-        p->v[0] /= a_end;
-        p->v[1] /= a_end;
-        p->v[2] /= a_end;
-
-        /* Update the mass */
+        /* Update the mass (needs to happen before converting the velocities!)*/
         double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
         double f = fermi_dirac_density(p_eV, T_eV);
         double w = (f - p->f_i)/p->f_i;
         p->mass = particle_mass * w;
+
+        /* Convert to peculiar velocities */
+        p->v[0] /= a_end;
+        p->v[1] /= a_end;
+        p->v[2] /= a_end;
     }
 
 
