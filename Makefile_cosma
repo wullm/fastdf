@@ -1,0 +1,42 @@
+#Compiler options
+GCC = mpicc
+
+#Libraries
+INI_PARSER = parser/minIni.o
+STD_LIBRARIES = -lm
+FFTW_LIBRARIES = -lfftw3 -lfftw3_threads -lfftw3_mpi
+HDF5_LIBRARIES = -lhdf5
+GSL_LIBRARIES = -lgsl -lgslcblas
+
+GSL_INCLUDES =
+
+HDF5_INCLUDES += -I/usr/lib64 -L/usr/lib64 -I/cosma/local/gcc/7.3.0/lib64/ -L/cosma/local/gcc/7.3.0/lib64/ -I/cosma/local/parallel-hdf5/intel_2018_intel_mpi_2018/1.10.3/lib -L/cosma/local/parallel-hdf5/intel_2018_intel_mpi_2018/1.10.3/lib -I/cosma/local/parallel-hdf5/intel_2018_intel_mpi_2018/1.10.3/include
+HDF5_LIBRARIES +=
+
+HDF5_INCLUDES += -I/cosma/local/gcc/7.3.0/include -I/cosma/local/parallel-hdf5/intel_2018_intel_mpi_2018/1.10.3/include
+HDF5_LIBRARIES += -L/cosma/local/parmetis/intel_2018_intel_mpi_2018/4.0.3/lib -L/cosma/local/gcc/7.3.0/lib64/ -Wl,-rpath=/cosma/local/gcc/7.3.0/lib64/   -lm
+
+#Putting it together
+INCLUDES = $(HDF5_INCLUDES) $(GSL_INCLUDES) $(FIREBOLT_INCLUDES)
+LIBRARIES = $(INI_PARSER) $(STD_LIBRARIES) $(FFTW_LIBRARIES) $(HDF5_LIBRARIES) $(GSL_LIBRARIES)
+CFLAGS = -Wall -Wshadow -fopenmp -march=native -Ofast
+
+OBJECTS = lib/*.o
+
+all:
+	make minIni
+	mkdir -p lib
+	$(GCC) src/input.c -c -o lib/input.o $(INCLUDES) $(CFLAGS)
+	$(GCC) src/output.c -c -o lib/output.o $(INCLUDES) $(CFLAGS)
+	$(GCC) src/titles.c -c -o lib/titles.o $(INCLUDES) $(CFLAGS)
+	$(GCC) src/perturb_data.c -c -o lib/perturb_data.o $(INCLUDES) $(CFLAGS)
+	$(GCC) src/perturb_spline.c -c -o lib/perturb_spline.o $(INCLUDES) $(CFLAGS)
+	$(GCC) src/header.c -c -o lib/header.o $(INCLUDES) $(CFLAGS)
+	$(GCC) src/cosmology.c -c -o lib/cosmology.o $(INCLUDES) $(CFLAGS)
+	$(GCC) src/fft.c -c -o lib/fft.o $(INCLUDES) $(CFLAGS)
+	$(GCC) src/mesh_grav.c -c -o lib/mesh_grav.o $(INCLUDES) $(CFLAGS)
+
+	$(GCC) src/fastdf.c -o fastdf $(INCLUDES) $(OBJECTS) $(LIBRARIES) $(CFLAGS) $(LDFLAGS)
+
+minIni:
+	cd parser && make
