@@ -71,7 +71,8 @@ int main(int argc, char *argv[]) {
     cosmo.Omega_m = ptpars.Omega_m;
     cosmo.Omega_k = ptpars.Omega_k;
     cosmo.Omega_lambda = ptpars.Omega_lambda;
-    cosmo.Omega_r = ptpars.Omega_ur;
+    // cosmo.Omega_r = ptpars.Omega_ur;
+    cosmo.Omega_r = 1 - cosmo.Omega_m - cosmo.Omega_k - cosmo.Omega_lambda;
 
     /* Compute cosmological tables (kick and drift factors) */
     intregateCosmologyTables(&cosmo);
