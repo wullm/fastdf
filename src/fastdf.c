@@ -277,7 +277,7 @@ int main(int argc, char *argv[]) {
     free(fgrf);
     free(fbox);
 
-    /* Set the masses in the final time, using the weights */
+    /* Final operations before writing the particles to disk */
     for (int i=0; i<pars.NumPartGenerate; i++) {
         struct particle_ext *p = &genparts[i];
 
@@ -285,6 +285,11 @@ int main(int argc, char *argv[]) {
         p->x[0] = fwrap(p->x[0], BoxLen);
         p->x[1] = fwrap(p->x[1], BoxLen);
         p->x[2] = fwrap(p->x[2], BoxLen);
+
+        /* Convert to peculiar velocities */
+        p->v[0] /= a_end;
+        p->v[1] /= a_end;
+        p->v[2] /= a_end;
 
         /* Update the mass */
         double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
