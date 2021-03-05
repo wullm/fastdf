@@ -25,7 +25,6 @@
 #include "../include/input.h"
 
 int readParams(struct params *pars, const char *fname) {
-     pars->GridSize = ini_getl("Box", "GridSize", 64, fname);
      pars->FirstID = ini_getl("Simulation", "FirstID", 0, fname);
 
      /* Desired particle numbers */
