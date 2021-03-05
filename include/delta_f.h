@@ -113,9 +113,9 @@ static inline double fermi_dirac_density(double p_eV, double T_eV) {
  * @param boxlen Comoving physical sidelength of the box
  * @param us Container of units physical constants
  */
-static double init_neutrino_particle(uint64_t seed, double m_eV, double *v,
-                                     double *x, double *w, double boxlen,
-                                     const struct units *us, double T_eV) {
+static void init_neutrino_particle(uint64_t seed, double m_eV, double *v,
+                                   double *x, double *w, double boxlen,
+                                   const struct units *us, double T_eV) {
 
     /* Retrieve physical constants */
     const double c = us->SpeedOfLight;
@@ -152,8 +152,6 @@ static double init_neutrino_particle(uint64_t seed, double m_eV, double *v,
 
     /* Initially, the weight is zero (dithering may be necessary here) */
     *w = 0;
-
-    return u;
 }
 
 /**

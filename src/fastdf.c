@@ -145,14 +145,15 @@ int main(int argc, char *argv[]) {
         long long id = i + pars.FirstID;
 
         /* Generate random particle velocity and position */
-        double u = init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
-
-        if (i==0)
-        printf("First random velocity = %f\n", u);
+        init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
 
         /* Compute the momentum in eV */
         const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
         const double f_i = fermi_dirac_density(p_eV, T_eV);
+
+        if (i==0)
+        printf("First random momentum = %f\n", p_eV);
+
 
         /* Compute initial phase space density */
         p->f_i = f_i;
