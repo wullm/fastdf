@@ -399,6 +399,8 @@ int main(int argc, char *argv[]) {
             p->v[1] -= kick_factor * us.GravityG * (p->v[0] * acc_By[0] + p->v[1] * acc_By[1] + p->v[2] * acc_By[2]);
             p->v[2] -= kick_factor * us.GravityG * (p->v[0] * acc_Bz[0] + p->v[1] * acc_Bz[1] + p->v[2] * acc_Bz[2]);
 
+            printf("%e %e\n", (-acc[0] + acc_chi[0] * relat_stress_correction) * kick, kick_factor * us.GravityG * (p->v[0] * acc_Bx[0] + p->v[1] * acc_Bx[1] + p->v[2] * acc_Bx[2])/a);
+
             /* Execute delta-f step */
             double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
             double f = fermi_dirac_density(p_eV, T_eV);
@@ -406,9 +408,14 @@ int main(int argc, char *argv[]) {
             I_df += w*w;
 
             /* Execute drift */
-            p->x[0] += p->v[0] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2) + Bx_c * a;
-            p->x[1] += p->v[1] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2) + By_c * a;
-            p->x[2] += p->v[2] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2) + Bz_c * a;
+            p->x[0] += p->v[0] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
+            p->x[1] += p->v[1] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
+            p->x[2] += p->v[2] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
+
+            /* Add the vector potential contribution */
+            p->x[0] += Bx_c * a;
+            p->x[1] += By_c * a;
+            p->x[2] += Bz_c * a;
         }
 
         /* Step forward */
