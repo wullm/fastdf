@@ -34,7 +34,6 @@ double gridCIC(const double *box, int N, double boxlen, double x, double y,
     int iY = (int) floor(Y);
     int iZ = (int) floor(Z);
 
-
     /* Intepolate the necessary fields with CIC or TSC */
     double lookLength = 1.0;
     int lookLftX = (int) floor((X-iX) - lookLength);

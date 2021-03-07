@@ -112,22 +112,10 @@ int main(int argc, char *argv[]) {
     fft_normalize_r2c(fbox, N, BoxLen);
     fftw_destroy_plan(r2c);
 
-    /* Allocate another pair of boxes for the anisotropic stress */
-    fftw_complex *fbox2 = malloc(N*N*N*sizeof(fftw_complex));
-    double *box2 = malloc(N*N*N*sizeof(double));
-
     /* Allocate another pair of boxes for the N-body gauge terms */
-    fftw_complex *fbox3 = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_complex *fbox4 = malloc(N*N*N*sizeof(fftw_complex));
-    double *box3 = malloc(N*N*N*sizeof(double));
-
-    /* Allocate boxes for the vector potential */
-    fftw_complex *fBbox_x = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_complex *fBbox_y = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_complex *fBbox_z = malloc(N*N*N*sizeof(fftw_complex));
-    double *Bbox_x = malloc(N*N*N*sizeof(double));
-    double *Bbox_y = malloc(N*N*N*sizeof(double));
-    double *Bbox_z = malloc(N*N*N*sizeof(double));
+    fftw_complex *fbox_Nb1 = malloc(N*N*N*sizeof(fftw_complex));
+    fftw_complex *fbox_Nb2 = malloc(N*N*N*sizeof(fftw_complex));
+    double *box_chi = malloc(N*N*N*sizeof(double));
 
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
@@ -214,9 +202,6 @@ int main(int argc, char *argv[]) {
             a_next = a_end;
         }
 
-        /* Collect the I statistic */
-        double I_df = 0;
-
         /* Retrieve physical constants */
         const double potential_factor = a / us.GravityG;
         const double c = us.SpeedOfLight;
@@ -228,45 +213,31 @@ int main(int argc, char *argv[]) {
 
         /* The indices of the potential transfer function */
         int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
-        int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
         int index_H_p = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
         int index_H_pp = findTitle(ptdat.titles, "H_T_Nb_prime_prime", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_phi, tau_index, u_tau};
-        struct spline_params sp2 = {&spline, index_psi, tau_index, u_tau};
-        struct spline_params sp3 = {&spline, index_H_p, tau_index, u_tau};
-        struct spline_params sp4 = {&spline, index_H_pp, tau_index, u_tau};
-
-
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
-        fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
-        fft_apply_kernel(fBbox_x, fbox, N, BoxLen, kernel_dx, NULL);
-        fft_apply_kernel(fBbox_y, fbox, N, BoxLen, kernel_dy, NULL);
-        fft_apply_kernel(fBbox_z, fbox, N, BoxLen, kernel_dz, NULL);
+        struct spline_params sp_Nb1 = {&spline, index_H_p, tau_index, u_tau};
+        struct spline_params sp_Nb2 = {&spline, index_H_pp, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
 
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
-
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
-        fft_apply_kernel(fbox4, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
+        /* Apply the transfer function (read only fgrf, output into fbox_Nbx) */
+        fft_apply_kernel(fbox_Nb1, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nb1);
+        fft_apply_kernel(fbox_Nb2, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nb2);
 
         /* Hubble constant at this redshift */
         double H = cosmo.H_0 * E_z(a, &cosmo);
 
         /* Add the N-body gauge terms */
         for (int i=0; i<N*N*(N/2+1); i++) {
-            fbox3[i] = -(fbox3[i] * H * a + fbox4[i]);
+            fbox_Nb1[i] = (fbox_Nb1[i] * H * a + fbox_Nb2[i]);
         }
 
         /* Solve Poisson equation */
-        fft_apply_kernel(fbox3, fbox3, N, BoxLen, kernel_inv_poisson, NULL);
-
+        fft_apply_kernel(fbox_Nb1, fbox_Nb1, N, BoxLen, kernel_inv_poisson, NULL);
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -274,44 +245,15 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
-        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
+        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox_Nb1, box_chi, FFTW_ESTIMATE);
         fft_execute(c2r2);
-        fft_normalize_c2r(box2, N, BoxLen);
+        fft_normalize_c2r(box_chi, N, BoxLen);
         fftw_destroy_plan(c2r2);
-
-        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box3, FFTW_ESTIMATE);
-        fft_execute(c2r3);
-        fft_normalize_c2r(box3, N, BoxLen);
-        fftw_destroy_plan(c2r3);
-
-        fftw_plan c2rBx = fftw_plan_dft_c2r_3d(N, N, N, fBbox_x, Bbox_x, FFTW_ESTIMATE);
-        fftw_plan c2rBy = fftw_plan_dft_c2r_3d(N, N, N, fBbox_y, Bbox_y, FFTW_ESTIMATE);
-        fftw_plan c2rBz = fftw_plan_dft_c2r_3d(N, N, N, fBbox_z, Bbox_z, FFTW_ESTIMATE);
-        fft_execute(c2rBx);
-        fft_execute(c2rBy);
-        fft_execute(c2rBz);
-        fft_normalize_c2r(Bbox_x, N, BoxLen);
-        fft_normalize_c2r(Bbox_y, N, BoxLen);
-        fft_normalize_c2r(Bbox_z, N, BoxLen);
-        fftw_destroy_plan(c2rBx);
-        fftw_destroy_plan(c2rBy);
-        fftw_destroy_plan(c2rBz);
 
         /* Multiply by the potential factor */
         for (int i=0; i<N*N*N; i++) {
             box[i] *= potential_factor;
-            box2[i] *= potential_factor;
-            box3[i] *= potential_factor;
-
-            Bbox_x[i] *= potential_factor;
-            Bbox_y[i] *= potential_factor;
-            Bbox_z[i] *= potential_factor;
-        }
-
-        /* Compute the anisotropic stress (chi = phi - psi) */
-        for (int i=0; i<N*N*N; i++) {
-            // box2[i] = box[i] - box2[i];
-            box2[i] = -box3[i];
+            box_chi[i] *= potential_factor;
         }
 
         char pot_fname[50];
@@ -320,28 +262,14 @@ int main(int argc, char *argv[]) {
 
         char chi_fname[50];
         sprintf(chi_fname, "chi_%d.hdf5", ITER);
-        writeFieldFile(box2, N, BoxLen, chi_fname);
-
-        char Nb_fname[50];
-        sprintf(Nb_fname, "Nb_%d.hdf5", ITER);
-        writeFieldFile(box3, N, BoxLen, Nb_fname);
-
-        char Bx_fname[50];
-        sprintf(Bx_fname, "Bx_%d.hdf5", ITER);
-        writeFieldFile(Bbox_x, N, BoxLen, Bx_fname);
-        char By_fname[50];
-        sprintf(By_fname, "By_%d.hdf5", ITER);
-        writeFieldFile(Bbox_y, N, BoxLen, By_fname);
-        char Bz_fname[50];
-        sprintf(Bz_fname, "Bz_%d.hdf5", ITER);
-        writeFieldFile(Bbox_z, N, BoxLen, Bz_fname);
+        writeFieldFile(box_chi, N, BoxLen, chi_fname);
 
         /* Fetch the cosmological kick and drift factors */
         double kick_factor = get_kick_factor(&cosmo, log(a), log(a_next));
         double drift_factor = get_drift_factor(&cosmo, log(a), log(a_next));
 
         /* Integrate the particles */
-        #pragma omp parallel for reduction(+:I_df)
+        #pragma omp parallel for
         for (int i=0; i<pars.NumPartGenerate; i++) {
             struct particle_ext *p = &genparts[i];
 
@@ -351,39 +279,23 @@ int main(int argc, char *argv[]) {
 
             /* Get the acceleration from the anistropic stress chi */
             double acc_chi[3];
-            accelCIC(box2, N, BoxLen, p->x, acc_chi);
-
-            // /* Get the acceleration from the N-body gauge term */
-            // double acc_Nb[3];
-            // accelCIC(box3, N, BoxLen, p->x, acc_Nb);
-
-            /* Get the acceleration from the N-body gauge term */
-            double acc_Bx[3];
-            double acc_By[3];
-            double acc_Bz[3];
-            accelCIC(Bbox_x, N, BoxLen, p->x, acc_Bx);
-            accelCIC(Bbox_y, N, BoxLen, p->x, acc_By);
-            accelCIC(Bbox_z, N, BoxLen, p->x, acc_Bz);
+            accelCIC(box_chi, N, BoxLen, p->x, acc_chi);
 
             /* Also fetch the values of the potential and stress */
-            double phi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]) * us.GravityG / a;
-            double chi = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]) * us.GravityG / a;
-            double phi_c2 = phi / (c * c);
-            double chi_c2 = chi / (c * c);
-
-            double Bx = gridCIC(Bbox_x, N, BoxLen, p->x[0], p->x[1], p->x[2]) * us.GravityG / a;
-            double By = gridCIC(Bbox_y, N, BoxLen, p->x[0], p->x[1], p->x[2]) * us.GravityG / a;
-            double Bz = gridCIC(Bbox_z, N, BoxLen, p->x[0], p->x[1], p->x[2]) * us.GravityG / a;
-
-            double Bx_c = Bx / c;
-            double By_c = By / c;
-            double Bz_c = Bz / c;
+            double phi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double chi = gridCIC(box_chi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_c2 = phi / (c * c * potential_factor);
+            double chi_c2 = chi / (c * c * potential_factor);
 
             /* Fetch the relativistic correction factors */
-            double relat_kick_correction = relativity_kick(p->v_i, a, &us);
-            double relat_drift_correction = relativity_drift(p->v, a, &us);
-            double relat_extra_correction = relativity_extra(p->v, a, &us);
-            double relat_stress_correction = 1./(relat_drift_correction * relat_kick_correction);
+            double ui = p->v_i / (a * c);
+            double ui2 = ui * ui;
+            double epsfac = hypot(ui, 1);
+            double epsfac_inv = 1./epsfac;
+            double relat_kick_correction = (2 * ui2 + 1) * epsfac_inv;
+            double relat_drift_correction = epsfac_inv;
+            double relat_stress_correction = epsfac / relat_kick_correction;
+            double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
 
             /* Compute the overall kick and drift step sizes */
             double kick = kick_factor * relat_kick_correction * us.GravityG;
@@ -394,35 +306,33 @@ int main(int argc, char *argv[]) {
             p->v[1] += (-acc[1] + acc_chi[1] * relat_stress_correction) * kick;
             p->v[2] += (-acc[2] + acc_chi[2] * relat_stress_correction) * kick;
 
-            /* Add the vector potential contribution */
-            p->v[0] -= kick_factor * us.GravityG * (p->v[0] * acc_Bx[0] + p->v[1] * acc_Bx[1] + p->v[2] * acc_Bx[2]);
-            p->v[1] -= kick_factor * us.GravityG * (p->v[0] * acc_By[0] + p->v[1] * acc_By[1] + p->v[2] * acc_By[2]);
-            p->v[2] -= kick_factor * us.GravityG * (p->v[0] * acc_Bz[0] + p->v[1] * acc_Bz[1] + p->v[2] * acc_Bz[2]);
-
-            printf("%e %e\n", (-acc[0] + acc_chi[0] * relat_stress_correction) * kick, kick_factor * us.GravityG * (p->v[0] * acc_Bx[0] + p->v[1] * acc_Bx[1] + p->v[2] * acc_Bx[2])/a);
-
-            /* Execute delta-f step */
-            double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
-            double f = fermi_dirac_density(p_eV, T_eV);
-            double w = (p->f_i - f)/p->f_i;
-            I_df += w*w;
-
             /* Execute drift */
             p->x[0] += p->v[0] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
             p->x[1] += p->v[1] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
             p->x[2] += p->v[2] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
-
-            /* Add the vector potential contribution */
-            p->x[0] += Bx_c * a;
-            p->x[1] += By_c * a;
-            p->x[2] += Bz_c * a;
         }
+
+        /* Compute weights for fraction of particles (diagnostics only) */
+        int weight_compute_invfreq = 1;
+
+        /* Collect the I statistic */
+        double I_df = 0;
+
+        #pragma omp parallel for reduction(+:I_df)
+        for (int i=0; i<pars.NumPartGenerate; i+=weight_compute_invfreq) {
+            struct particle_ext *p = &genparts[i];
+
+            double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
+            double f = fermi_dirac_density(p_eV, T_eV);
+            double w = (p->f_i - f)/p->f_i;
+            I_df += w*w;
+        }
+
+        /* Compute summary statistic */
+        I_df *= 0.5 / pars.NumPartGenerate * weight_compute_invfreq;
 
         /* Step forward */
         a = a_next;
-
-        /* Compute summary statistic */
-        I_df *= 0.5 / pars.NumPartGenerate;
 
         message(rank, "%04d] %f %f %e\n", ITER, a, 1./a-1, I_df);
     }
@@ -431,18 +341,9 @@ int main(int argc, char *argv[]) {
     free(box);
     free(fgrf);
     free(fbox);
-    free(box2);
-    free(fbox2);
-    free(box3);
-    free(fbox3);
-    free(fbox4);
-
-    free(fBbox_x);
-    free(fBbox_y);
-    free(fBbox_z);
-    free(Bbox_x);
-    free(Bbox_y);
-    free(Bbox_z);
+    free(fbox_Nb1);
+    free(fbox_Nb2);
+    free(box_chi);
 
     /* Final operations before writing the particles to disk */
     for (int i=0; i<pars.NumPartGenerate; i++) {
@@ -466,7 +367,6 @@ int main(int argc, char *argv[]) {
         p->v[1] /= a_end;
         p->v[2] /= a_end;
     }
-
 
     header(rank, "Prepare output");
 
