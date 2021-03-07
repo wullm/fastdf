@@ -153,38 +153,3 @@ static void init_neutrino_particle(uint64_t seed, double m_eV, double *v,
     /* Initially, the weight is zero (dithering may be necessary here) */
     *w = 0;
 }
-
-/**
- * @brief Compute the conversion factor from simulation particle mass to
- * microscopic particle mass in electronvolts.
- *
- * @param nr_neutrinos Total number of neutrino particles in simulation
- * @param boxlen Comoving physical sidelength of the box
- * @param phys_const Container of physical constants
- */
-static double neutrino_mass_factor(long long nr_neutrinos, double boxlen,
-                                   const struct phys_const *phys_const) {
-    /* Some constants */
-    const double T_nu = phys_const->neutrino_temperature;
-    const double k_b = phys_const->boltzmann_constant;
-    const double hbar = phys_const->reduced_planck_constant;
-    const double c = phys_const->speed_of_light;
-    const double eV = phys_const->electronvolt;
-    const double eV_mass = eV / (c * c); // 1 eV/c^2 in internal mass units
-    const double prefactor = (1.5 * M_ZETA_3) / (M_PI * M_PI);
-    const double volume = boxlen * boxlen * boxlen;
-
-    /* The number of massive neutrino flavours according to multiplicity */
-    const double flavours = 3.0;
-
-    /* Compute the comoving number density per flavour */
-    const double n = prefactor * pow(k_b * T_nu / (hbar * c), 3);
-
-    /* Compute the conversion factor */
-    const double mass_factor = ((double)nr_neutrinos) / (flavours * n * volume);
-
-    /* Convert to eV */
-    const double mass_factor_eV = mass_factor / eV_mass;
-
-    return mass_factor_eV;
-}

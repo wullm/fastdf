@@ -43,11 +43,13 @@ int readParams(struct params *pars, const char *fname) {
      pars->OutputFilename = malloc(len);
      pars->PerturbFile = malloc(len);
      pars->GaussianRandomFieldFile = malloc(len);
+     pars->TransferFunctionDensity = malloc(len);
      ini_gets("Output", "Directory", "./output", pars->OutputDirectory, len, fname);
      ini_gets("Simulation", "Name", "No Name", pars->Name, len, fname);
      ini_gets("Output", "Filename", "particles.hdf5", pars->OutputFilename, len, fname);
      ini_gets("Output", "ExportName", "PartType6", pars->ExportName, len, fname);
      ini_gets("PerturbData", "File", "", pars->PerturbFile, len, fname);
+     ini_gets("PerturbData", "TransferFunctionDensity", "", pars->TransferFunctionDensity, len, fname);
      ini_gets("Box", "GaussianRandomFieldFile", "", pars->GaussianRandomFieldFile, len, fname);
 
      return 0;
@@ -86,6 +88,7 @@ int cleanParams(struct params *pars) {
     free(pars->OutputFilename);
     free(pars->PerturbFile);
     free(pars->GaussianRandomFieldFile);
+    free(pars->TransferFunctionDensity);
 
     return 0;
 }

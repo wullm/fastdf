@@ -73,6 +73,7 @@ int main(int argc, char *argv[]) {
     cosmo.Omega_lambda = ptpars.Omega_lambda;
     // cosmo.Omega_r = ptpars.Omega_ur;
     cosmo.Omega_r = 1 - cosmo.Omega_m - cosmo.Omega_k - cosmo.Omega_lambda;
+    cosmo.rho_crit = 3 * cosmo.H_0 * cosmo.H_0 / (8. * M_PI * us.GravityG);
 
     /* Compute cosmological tables (kick and drift factors) */
     intregateCosmologyTables(&cosmo);
@@ -81,7 +82,6 @@ int main(int argc, char *argv[]) {
     const double m_eV = ptpars.M_ncdm_eV[0];
     const double T_nu = ptpars.T_ncdm[0] * ptpars.T_CMB;
     const double T_eV = T_nu * us.kBoltzmann / us.ElectronVolt;
-    struct phys_const phys_const = { us.SpeedOfLight, us.kBoltzmann, us.hPlanck / (2*M_PI), us.ElectronVolt, T_nu, T_eV};
 
     /* Initialize the interpolation spline for the perturbation data */
     initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
@@ -120,15 +120,24 @@ int main(int argc, char *argv[]) {
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
 
-    /* Compute neutrino mass factor */
-    const double mass_factor = neutrino_mass_factor(pars.NumPartGenerate, BoxLen, &phys_const);
+    /* Find the relevant density title among the transfer functions */
+    char *title = pars.TransferFunctionDensity;
+    int index_src = findTitle(ptdat.titles, title, ptdat.n_functions);
+    if (index_src < 0) {
+        printf("Error: transfer function '%s' not found (%d).\n", title, index_src);
+        return 1;
+    }
 
+    /* The index of the present-day, corresponds to the last index in the array */
+    int today_index = ptdat.tau_size - 1;
 
-    /* Compute the particle mass in internal units */
-    const double particle_mass = m_eV / mass_factor;
+    /* Find the present-day density, as fraction of the critical density */
+    const double box_vol = BoxLen * BoxLen * BoxLen;
+    const double Omega = ptdat.Omega[ptdat.tau_size * index_src + today_index];
+    const double rho = Omega * cosmo.rho_crit;
+    const double particle_mass = rho * box_vol / pars.NumPartGenerate;
 
     header(rank, "Mass factors");
-    printf("Neutrino mass factor = %e\n", mass_factor);
     printf("Neutrino mass is %f eV\n", m_eV);
     printf("Particle mass is %f\n", particle_mass);
 

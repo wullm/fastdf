@@ -48,6 +48,7 @@ struct params {
     /* Simulation parameters */
     char *Name;
     char *PerturbFile;
+    char *TransferFunctionDensity;
     double ScaleFactorBegin;
     double ScaleFactorEnd;
     double ScaleFactorStep;
