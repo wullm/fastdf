@@ -346,6 +346,7 @@ int main(int argc, char *argv[]) {
     free(box_chi);
 
     /* Final operations before writing the particles to disk */
+    #pragma omp parallel for
     for (int i=0; i<pars.NumPartGenerate; i++) {
         struct particle_ext *p = &genparts[i];
 
