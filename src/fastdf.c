@@ -144,6 +144,7 @@ int main(int argc, char *argv[]) {
     printf("ID of first particle = %lld\n", pars.FirstID);
 
     /* Generate random neutrino particles */
+    #pragma omp parallel for
     for (int i=0; i<pars.NumPartGenerate; i++) {
         struct particle_ext *p = &genparts[i];
 
@@ -159,7 +160,6 @@ int main(int argc, char *argv[]) {
 
         if (i==0)
         printf("First random momentum = %f\n", p_eV);
-
 
         /* Compute initial phase space density */
         p->f_i = f_i;
