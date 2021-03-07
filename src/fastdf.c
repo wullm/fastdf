@@ -343,7 +343,7 @@ int main(int argc, char *argv[]) {
         /* Step forward */
         a = a_next;
 
-        message(rank, "%04d] %f %f %e\n", ITER, a, 1./a-1, I_df);
+        message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
     }
 
     /* Free memory */
