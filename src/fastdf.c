@@ -300,13 +300,13 @@ int main(int argc, char *argv[]) {
             box_chi[i] *= potential_factor;
         }
 
-        if (rank == 0) {
+        if (rank == 0 && pars.OutputFields) {
             char pot_fname[50];
-            sprintf(pot_fname, "phi_%d.hdf5", ITER);
+            sprintf(pot_fname, "%s/phi_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box, N, BoxLen, pot_fname);
 
             char chi_fname[50];
-            sprintf(chi_fname, "chi_%d.hdf5", ITER);
+            sprintf(chi_fname, "%s/chi_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box_chi, N, BoxLen, chi_fname);
         }
 
@@ -419,7 +419,8 @@ int main(int argc, char *argv[]) {
 
     header(rank, "Prepare output");
 
-    char *out_fname = pars.OutputFilename;
+    char out_fname[200];
+    sprintf(out_fname, "%s/%s", pars.OutputDirectory, pars.OutputFilename);
     message(rank, "Writing output to %s.\n", out_fname);
 
     if (rank == 0) {

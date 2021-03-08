@@ -35,6 +35,8 @@ int readParams(struct params *pars, const char *fname) {
      pars->ScaleFactorEnd = ini_getd("Simulation", "ScaleFactorEnd", 0.01, fname);
      pars->ScaleFactorStep = ini_getd("Simulation", "ScaleFactorStep", 0.05, fname);
 
+     pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
+
      /* Read strings */
      int len = DEFAULT_STRING_LENGTH;
      pars->OutputDirectory = malloc(len);

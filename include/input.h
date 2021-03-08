@@ -57,6 +57,7 @@ struct params {
     char *OutputDirectory;
     char *OutputFilename;
     char *ExportName;
+    char OutputFields;
 
     /* MPI rank (generated automatically) */
     int rank;
