@@ -31,6 +31,18 @@ hid_t openFile(const char *fname) {
     return h_file;
 }
 
+hid_t openFile_MPI(MPI_Comm comm, const char *fname) {
+    /* Property list for MPI file access */
+    hid_t prop_faxs = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_fapl_mpio(prop_faxs, comm, MPI_INFO_NULL);
+
+    /* Open the hdf5 file */
+    hid_t h_file = H5Fopen(fname, H5F_ACC_RDWR, prop_faxs);
+    H5Pclose(prop_faxs);
+
+    return h_file;
+}
+
 hid_t createFile(const char *fname) {
     /* Create the hdf5 file */
     hid_t h_file = H5Fcreate(fname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);

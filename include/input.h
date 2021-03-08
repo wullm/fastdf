@@ -84,6 +84,9 @@ int cleanParams(struct params *parser);
 
 int readFieldFile(double **box, int *N, double *box_len, const char *fname);
 
+int readFieldFile_MPI(double **box, int *N, double *box_len, MPI_Comm comm,
+                      const char *fname);
+
 static inline void generateFieldFilename(const struct params *pars, char *fname,
                                          const char *Identifier, const char *title,
                                          const char *extra) {

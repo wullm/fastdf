@@ -33,9 +33,19 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    /* Initialize MPI for distributed memory parallelization */
+    MPI_Init(&argc, &argv);
+    fftw_mpi_init();
+
+    /* Get the dimensions of the cluster */
+    int rank, MPI_Rank_Count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &MPI_Rank_Count);
+
     /* Read options */
     const char *fname = argv[1];
-    printf("The parameter file is %s\n", fname);
+    header(rank, "FastDF Neutrino Initial Condition Generator");
+    message(rank, "The parameter file is %s\n", fname);
 
     /* Timer */
     struct timeval time_stop, time_start;
@@ -48,8 +58,7 @@ int main(int argc, char *argv[]) {
     struct perturb_spline spline;
     struct perturb_params ptpars;
 
-    /* No MPI for now */
-    int rank = 0;
+    /* Store the MPI rank */
     pars.rank = rank;
 
     /* Read parameter file for parameters, units */
@@ -87,11 +96,11 @@ int main(int argc, char *argv[]) {
     initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
 
     header(rank, "Simulation parameters");
-    printf("We want %lld (%d^3) particles\n", pars.NumPartGenerate, pars.CubeRootNumber);
-    printf("a_begin = %.3e (z = %.2f)\n", cosmo.a_begin, 1./cosmo.a_begin - 1);
-    printf("a_end = %.3e (z = %.2f)\n", cosmo.a_end, 1./cosmo.a_end - 1);
+    message(rank, "We want %lld (%d^3) particles\n", pars.NumPartGenerate, pars.CubeRootNumber);
+    message(rank, "a_begin = %.3e (z = %.2f)\n", cosmo.a_begin, 1./cosmo.a_begin - 1);
+    message(rank, "a_end = %.3e (z = %.2f)\n", cosmo.a_end, 1./cosmo.a_end - 1);
 
-    /* Read the Gaussian random field */
+    /* Read the Gaussian random field on each MPI rank */
     double *box;
     double BoxLen;
     int N;
@@ -99,10 +108,10 @@ int main(int argc, char *argv[]) {
     header(rank, "Random phases");
     message(rank, "Reading Gaussian random field from %s.\n", pars.GaussianRandomFieldFile);
 
-    readFieldFile(&box, &N, &BoxLen, pars.GaussianRandomFieldFile);
+    readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.GaussianRandomFieldFile);
 
-    printf("BoxLen = %f\n", BoxLen);
-    printf("GridSize = %d\n", N);
+    message(rank, "BoxLen = %.2f U_L\n", BoxLen);
+    message(rank, "GridSize = %d\n", N);
 
     /* Fourier transform the Gaussian random field */
     fftw_complex *fbox = malloc(N*N*N*sizeof(fftw_complex));
@@ -124,7 +133,7 @@ int main(int argc, char *argv[]) {
     char *title = pars.TransferFunctionDensity;
     int index_src = findTitle(ptdat.titles, title, ptdat.n_functions);
     if (index_src < 0) {
-        printf("Error: transfer function '%s' not found (%d).\n", title, index_src);
+        message(rank, "Error: transfer function '%s' not found (%d).\n", title, index_src);
         return 1;
     }
 
@@ -138,27 +147,53 @@ int main(int argc, char *argv[]) {
     const double particle_mass = rho * box_vol / pars.NumPartGenerate;
 
     header(rank, "Mass factors");
-    printf("Neutrino mass is %f eV\n", m_eV);
-    printf("Particle mass is %f\n", particle_mass);
+    message(rank, "Neutrino mass is %f eV\n", m_eV);
+    message(rank, "Particle mass is %f U_M\n", particle_mass);
 
     /* Store the Box Length */
     pars.BoxLen = BoxLen;
 
-    /* The particles to be generated */
+    /* Determine the number of particle to be generated on each rank */
+    header(rank, "Particle distribution");
+
+    /* The particles are also generated from a grid with dimension M^3 */
+    int M = pars.CubeRootNumber;
+
+    /* Determine what particles belong to this slice */
+    double fac = (double) M / MPI_Rank_Count;
+    int X_min = ceil(rank * fac);
+    int X_max = ceil((rank + 1) * fac);
+    int MX = X_max - X_min;
+    long long localParticleNumber = MX * M * M;
+    long long localFirstNumber = X_min * M * M;
+
+    /* Check that all particles have been assigned to a node */
+    long long totalParticlesAssigned;
+    MPI_Allreduce(&localParticleNumber, &totalParticlesAssigned, 1,
+                   MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+    assert(totalParticlesAssigned == M * M * M);
+    printf("%03d: Local particles [%04d, %04d], first = %lld, last = %lld, total = %lld\n", rank, X_min, X_max, localFirstNumber, localFirstNumber + localParticleNumber - 1, totalParticlesAssigned);
+
+    /* The particles to be generated on this node */
     struct particle_ext *genparts = malloc(sizeof(struct particle_ext) *
-                                            pars.NumPartGenerate);
+                                    localParticleNumber);
+
+    /* ID of the first particle on this node */
+    long long firstID = pars.FirstID + localFirstNumber;
+
+    MPI_Barrier(MPI_COMM_WORLD);
 
     header(rank, "Generating pre-initial conditions");
-    printf("T_eV = %e\n", T_eV);
-    printf("ID of first particle = %lld\n", pars.FirstID);
+    message(rank, "ID of first particle = %lld\n", firstID);
+    message(rank, "T_nu = %e eV\n", T_eV);
 
     /* Generate random neutrino particles */
     #pragma omp parallel for
-    for (int i=0; i<pars.NumPartGenerate; i++) {
+    for (int i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
         /* Set the ID of the particle */
-        long long id = i + pars.FirstID;
+        long long id = i + firstID;
 
         /* Generate random particle velocity and position */
         init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
@@ -168,7 +203,7 @@ int main(int argc, char *argv[]) {
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         if (i==0)
-        printf("First random momentum = %f\n", p_eV);
+        message(rank, "First random momentum = %e eV\n", p_eV);
 
         /* Compute initial phase space density */
         p->f_i = f_i;
@@ -177,7 +212,7 @@ int main(int argc, char *argv[]) {
         p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
     }
 
-    printf("Done with pre-initial conditions.\n");
+    message(rank, "Done with pre-initial conditions.\n");
 
     header(rank, "Initiating geodesic integration.");
 
@@ -188,9 +223,9 @@ int main(int argc, char *argv[]) {
 
     int MAX_ITER = (log(a_end) - log(a_begin))/log(a_factor) + 1;
 
-    printf("Step size %.4f\n", a_factor-1);
-    printf("Doing %d iterations\n", MAX_ITER);
-    printf("\n");
+    message(rank, "Step size %.4f\n", a_factor-1);
+    message(rank, "Doing %d iterations\n", MAX_ITER);
+    message(rank, "\n");
 
     /* Start at the beginning */
     double a = a_begin;
@@ -265,13 +300,15 @@ int main(int argc, char *argv[]) {
             box_chi[i] *= potential_factor;
         }
 
-        char pot_fname[50];
-        sprintf(pot_fname, "phi_%d.hdf5", ITER);
-        writeFieldFile(box, N, BoxLen, pot_fname);
+        if (rank == 0) {
+            char pot_fname[50];
+            sprintf(pot_fname, "phi_%d.hdf5", ITER);
+            writeFieldFile(box, N, BoxLen, pot_fname);
 
-        char chi_fname[50];
-        sprintf(chi_fname, "chi_%d.hdf5", ITER);
-        writeFieldFile(box_chi, N, BoxLen, chi_fname);
+            char chi_fname[50];
+            sprintf(chi_fname, "chi_%d.hdf5", ITER);
+            writeFieldFile(box_chi, N, BoxLen, chi_fname);
+        }
 
         /* Fetch the cosmological kick and drift factors */
         double kick_factor = get_kick_factor(&cosmo, log(a), log(a_next));
@@ -279,7 +316,7 @@ int main(int argc, char *argv[]) {
 
         /* Integrate the particles */
         #pragma omp parallel for
-        for (int i=0; i<pars.NumPartGenerate; i++) {
+        for (int i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
             /* Get the accelerations by computing the gradient of phi */
@@ -321,29 +358,31 @@ int main(int argc, char *argv[]) {
             p->x[2] += p->v[2] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
         }
 
-        /* Compute weights for fraction of particles (diagnostics only) */
-        int weight_compute_invfreq = 1;
-
-        /* Collect the I statistic */
-        double I_df = 0;
-
-        #pragma omp parallel for reduction(+:I_df)
-        for (int i=0; i<pars.NumPartGenerate; i+=weight_compute_invfreq) {
-            struct particle_ext *p = &genparts[i];
-
-            double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
-            double f = fermi_dirac_density(p_eV, T_eV);
-            double w = (p->f_i - f)/p->f_i;
-            I_df += w*w;
-        }
-
-        /* Compute summary statistic */
-        I_df *= 0.5 / pars.NumPartGenerate * weight_compute_invfreq;
-
         /* Step forward */
         a = a_next;
 
-        message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
+        /* Compute weights for fraction of particles (diagnostics only) */
+        int weight_compute_invfreq = 1000;
+
+        /* Collect the I statistic */
+        if (rank == 0) {
+            double I_df = 0;
+
+            #pragma omp parallel for reduction(+:I_df)
+            for (int i=0; i<localParticleNumber; i+=weight_compute_invfreq) {
+                struct particle_ext *p = &genparts[i];
+
+                double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
+                double f = fermi_dirac_density(p_eV, T_eV);
+                double w = (p->f_i - f)/p->f_i;
+                I_df += w*w;
+            }
+
+            /* Compute summary statistic */
+            I_df *= 0.5 / pars.NumPartGenerate * weight_compute_invfreq;
+
+            message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
+        }
     }
 
     /* Free memory */
@@ -356,7 +395,7 @@ int main(int argc, char *argv[]) {
 
     /* Final operations before writing the particles to disk */
     #pragma omp parallel for
-    for (int i=0; i<pars.NumPartGenerate; i++) {
+    for (int i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
         /* Ensure that particles wrap */
@@ -383,60 +422,93 @@ int main(int argc, char *argv[]) {
     char *out_fname = pars.OutputFilename;
     message(rank, "Writing output to %s.\n", out_fname);
 
-    /* Create the output file */
-    hid_t h_out_file = createFile(out_fname);
+    if (rank == 0) {
+        /* Create the output file */
+        hid_t h_out_file = createFile(out_fname);
 
-    /* Writing attributes into the Header & Cosmology groups */
-    int err = writeHeaderAttributes(&pars, &cosmo, &us, pars.NumPartGenerate, h_out_file);
-    if (err > 0) exit(1);
+        /* Writing attributes into the Header & Cosmology groups */
+        int err = writeHeaderAttributes(&pars, &cosmo, &us, pars.NumPartGenerate, h_out_file);
+        if (err > 0) exit(1);
 
-    /* The ExportName */
-    const char *ExportName = pars.ExportName;
+        /* The ExportName */
+        const char *ExportName = pars.ExportName;
+
+        /* The particle group in the output file */
+        hid_t h_grp;
+
+        /* Datsets */
+        hid_t h_data;
+
+        /* Vector dataspace (e.g. positions, velocities) */
+        const hsize_t vrank = 2;
+        const hsize_t vdims[2] = {pars.NumPartGenerate, 3};
+        hid_t h_vspace = H5Screate_simple(vrank, vdims, NULL);
+
+        /* Scalar dataspace (e.g. masses, particle ids) */
+        const hsize_t srank = 1;
+        const hsize_t sdims[1] = {pars.NumPartGenerate};
+        hid_t h_sspace = H5Screate_simple(srank, sdims, NULL);
+
+        /* Create the particle group in the output file */
+        printf("Creating Group '%s' with %lld particles.\n", ExportName, pars.NumPartGenerate);
+        h_grp = H5Gcreate(h_out_file, ExportName, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+        /* Coordinates (use vector space) */
+        h_data = H5Dcreate(h_grp, "Coordinates", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        H5Dclose(h_data);
+
+        /* Velocities (use vector space) */
+        h_data = H5Dcreate(h_grp, "Velocities", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        H5Dclose(h_data);
+
+        /* Masses (use scalar space) */
+        h_data = H5Dcreate(h_grp, "Masses", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        H5Dclose(h_data);
+
+        /* Particle IDs (use scalar space) */
+        h_data = H5Dcreate(h_grp, "ParticleIDs", H5T_NATIVE_LLONG, h_sspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        H5Dclose(h_data);
+
+        /* Close the group */
+        H5Gclose(h_grp);
+
+        /* Close the file */
+        H5Fclose(h_out_file);
+    }
+
+    /* Ensure that all nodes are at the final time step */
+    double a_min;
+    MPI_Allreduce(&a, &a_min, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+
+    /* Now open the file in parallel mode */
+    hid_t h_out_file = openFile_MPI(MPI_COMM_WORLD, out_fname);
 
     /* The particle group in the output file */
-    hid_t h_grp;
+    hid_t h_grp = H5Gopen(h_out_file, pars.ExportName, H5P_DEFAULT);
 
     /* Datsets */
     hid_t h_data;
 
     /* Vector dataspace (e.g. positions, velocities) */
     const hsize_t vrank = 2;
-    const hsize_t vdims[2] = {pars.NumPartGenerate, 3};
-    hid_t h_vspace = H5Screate_simple(vrank, vdims, NULL);
+    h_data = H5Dopen2(h_grp, "Velocities", H5P_DEFAULT);
+    hid_t h_vspace = H5Dget_space(h_data);
+    H5Dclose(h_data);
 
     /* Scalar dataspace (e.g. masses, particle ids) */
     const hsize_t srank = 1;
-    const hsize_t sdims[1] = {pars.NumPartGenerate};
-    hid_t h_sspace = H5Screate_simple(srank, sdims, NULL);
-
-    /* Create the particle group in the output file */
-    printf("Creating Group '%s' with %lld particles.\n", ExportName, pars.NumPartGenerate);
-    h_grp = H5Gcreate(h_out_file, ExportName, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    /* Coordinates (use vector space) */
-    h_data = H5Dcreate(h_grp, "Coordinates", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Dclose(h_data);
-
-    /* Velocities (use vector space) */
-    h_data = H5Dcreate(h_grp, "Velocities", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Dclose(h_data);
-
-    /* Masses (use scalar space) */
-    h_data = H5Dcreate(h_grp, "Masses", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5Dclose(h_data);
-
-    /* Particle IDs (use scalar space) */
-    h_data = H5Dcreate(h_grp, "ParticleIDs", H5T_NATIVE_LLONG, h_sspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    h_data = H5Dopen2(h_grp, "ParticleIDs", H5P_DEFAULT);
+    hid_t h_sspace = H5Dget_space(h_data);
     H5Dclose(h_data);
 
     /* Create vector & scalar datapsace for smaller chunks of data */
-    const hsize_t ch_vdims[2] = {pars.NumPartGenerate, 3};
-    const hsize_t ch_sdims[2] = {pars.NumPartGenerate};
+    const hsize_t ch_vdims[2] = {localParticleNumber, 3};
+    const hsize_t ch_sdims[2] = {localParticleNumber};
     hid_t h_ch_vspace = H5Screate_simple(vrank, ch_vdims, NULL);
     hid_t h_ch_sspace = H5Screate_simple(srank, ch_sdims, NULL);
 
     /* The start of this chunk, in the overall vector & scalar spaces */
-    const hsize_t start_in_group = 0;
+    const hsize_t start_in_group = localFirstNumber;
     const hsize_t vstart[2] = {start_in_group, 0}; //always with the "x" coordinate
     const hsize_t sstart[1] = {start_in_group};
 
@@ -445,11 +517,11 @@ int main(int argc, char *argv[]) {
     H5Sselect_hyperslab(h_sspace, H5S_SELECT_SET, sstart, NULL, ch_sdims, NULL);
 
     /* Unpack particle data into contiguous arrays */
-    double *coords = malloc(3 * pars.NumPartGenerate * sizeof(double));
-    double *vels = malloc(3 * pars.NumPartGenerate * sizeof(double));
-    double *masses = malloc(1 * pars.NumPartGenerate * sizeof(double));
-    long long *ids = malloc(1 * pars.NumPartGenerate * sizeof(long long));
-    for (int i=0; i<pars.NumPartGenerate; i++) {
+    double *coords = malloc(3 * localParticleNumber * sizeof(double));
+    double *vels = malloc(3 * localParticleNumber * sizeof(double));
+    double *masses = malloc(1 * localParticleNumber * sizeof(double));
+    long long *ids = malloc(1 * localParticleNumber * sizeof(long long));
+    for (int i=0; i<localParticleNumber; i++) {
         coords[i * 3 + 0] = genparts[i].x[0];
         coords[i * 3 + 1] = genparts[i].x[1];
         coords[i * 3 + 2] = genparts[i].x[2];
@@ -457,7 +529,7 @@ int main(int argc, char *argv[]) {
         vels[i * 3 + 1] = genparts[i].v[1];
         vels[i * 3 + 2] = genparts[i].v[2];
         masses[i] = genparts[i].mass;
-        ids[i] = pars.FirstID + i;
+        ids[i] = firstID + i;
     }
 
     /* Write coordinate data (vector) */
@@ -496,6 +568,10 @@ int main(int argc, char *argv[]) {
 
     /* Free the particles array */
     free(genparts);
+
+    /* Done with MPI parallelization */
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Finalize();
 
     /* Clean up */
     cleanParams(&pars);
