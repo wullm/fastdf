@@ -69,31 +69,19 @@ int main(int argc, char *argv[]) {
     readPerturb(&pars, &us, &ptdat);
     readPerturbParams(&pars, &us, &ptpars);
 
-    /* Initialize the interpolation spline for the perturbation data */
-    initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
-
     /* Store cosmological parameters */
     cosmo.a_begin = pars.ScaleFactorBegin;
     cosmo.a_end = pars.ScaleFactorEnd;
     cosmo.log_a_begin = log(cosmo.a_begin);
     cosmo.log_a_end = log(cosmo.a_end);
-    cosmo.spline = &spline;
 
-    /* Copy over neutrino parameters */
-    cosmo.N_nu = ptpars.N_ncdm;
-    cosmo.M_nu = malloc(cosmo.N_nu * sizeof(double));
-    for (int i=0; i<cosmo.N_nu; i++) {
-        cosmo.M_nu[i] = ptpars.M_ncdm_eV[i];
-    }
-
-    /* Copy over other parameters */
     cosmo.h = ptpars.h;
     cosmo.H_0 = cosmo.h * 100 * KM_METRES / MPC_METRES * us.UnitTimeSeconds;
     cosmo.Omega_m = ptpars.Omega_m;
     cosmo.Omega_k = ptpars.Omega_k;
     cosmo.Omega_lambda = ptpars.Omega_lambda;
     // cosmo.Omega_r = ptpars.Omega_ur;
-    // cosmo.Omega_r = 1 - cosmo.Omega_m  - cosmo.Omega_k - cosmo.Omega_lambda;
+    cosmo.Omega_r = 1 - cosmo.Omega_m - cosmo.Omega_k - cosmo.Omega_lambda;
     cosmo.rho_crit = 3 * cosmo.H_0 * cosmo.H_0 / (8. * M_PI * us.GravityG);
 
     /* Compute cosmological tables (kick and drift factors) */
@@ -103,6 +91,9 @@ int main(int argc, char *argv[]) {
     const double m_eV = ptpars.M_ncdm_eV[0];
     const double T_nu = ptpars.T_ncdm[0] * ptpars.T_CMB;
     const double T_eV = T_nu * us.kBoltzmann / us.ElectronVolt;
+
+    /* Initialize the interpolation spline for the perturbation data */
+    initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
 
     header(rank, "Simulation parameters");
     message(rank, "We want %lld (%d^3) particles\n", pars.NumPartGenerate, pars.CubeRootNumber);
@@ -158,7 +149,6 @@ int main(int argc, char *argv[]) {
     header(rank, "Mass factors");
     message(rank, "Neutrino mass is %f eV\n", m_eV);
     message(rank, "Particle mass is %f U_M\n", particle_mass);
-    message(rank, "Density is %f U_M / U_L^3\n", rho);
 
     /* Store the Box Length */
     pars.BoxLen = BoxLen;

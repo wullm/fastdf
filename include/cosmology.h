@@ -22,7 +22,6 @@
 
 #include <hdf5.h>
 #include "input.h"
-#include "perturb_spline.h"
 
 struct cosmology {
     double h;
@@ -40,8 +39,6 @@ struct cosmology {
     double log_a_begin;
     double log_a_end;
 
-    struct perturb_spline *spline;
-
     double *drift_factor_table;
     double *kick_factor_table;
     double *log_a_table;
@@ -49,6 +46,7 @@ struct cosmology {
     struct units *units;
 };
 
+int readCosmology(struct cosmology *cosmo, struct units *us, hid_t h_file);
 int cleanCosmology(struct cosmology *cosmo);
 
 double E_z(double a, struct cosmology *cosmo);
