@@ -70,5 +70,6 @@ double perturbLogTauAtRedshift(const struct perturb_spline *spline, double redsh
 double perturbDensityAtLogTau(const struct perturb_spline *spline, double log_tau,
                               int index_src);
 
-
+/* Linear interpolation of the Hubble rate */
+double perturbHubbleAtLogTau(const struct perturb_spline *spline, double log_tau);
 #endif

@@ -22,110 +22,11 @@
 #include <math.h>
 #include <gsl/gsl_integration.h>
 #include "../include/cosmology.h"
+#include "../include/titles.h"
 
-int cosmo_table_length = 100;
+int cosmo_table_length = 1000;
 
 const size_t workspace_size = 100000;
-
-int readCosmology(struct cosmology *cosmo, struct units *us, hid_t h_file) {
-    /* Store reference to units struct */
-    cosmo->units = us;
-
-    /* Check if the Cosmology group exists */
-    hid_t h_status = H5Eset_auto1(NULL, NULL);  //turn off error printing
-    h_status = H5Gget_objinfo(h_file, "/Cosmology", 0, NULL);
-
-    /* If the group exists. */
-    if (h_status == 0) {
-        /* Open the Cosmology group */
-        hid_t h_grp = H5Gopen(h_file, "Cosmology", H5P_DEFAULT);
-
-        hid_t h_attr, h_err;
-
-        /* Read the Omega_m attribute */
-        h_attr = H5Aopen(h_grp, "Omega_m", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &cosmo->Omega_m);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        /* Read the Omega_r attribute */
-        h_attr = H5Aopen(h_grp, "Omega_r", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &cosmo->Omega_r);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        /* Read the Omega_k attribute */
-        h_attr = H5Aopen(h_grp, "Omega_k", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &cosmo->Omega_k);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        /* Read the Omega_lambda attribute */
-        h_attr = H5Aopen(h_grp, "Omega_lambda", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &cosmo->Omega_lambda);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        /* Read the h attribute */
-        h_attr = H5Aopen(h_grp, "h", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &cosmo->h);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        /* Read the a_beg attribute */
-        h_attr = H5Aopen(h_grp, "a_beg", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &cosmo->a_begin);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        /* Read the a_end attribute */
-        h_attr = H5Aopen(h_grp, "a_end", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &cosmo->a_end);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        /* Read the h attribute */
-        h_attr = H5Aopen(h_grp, "T_nu", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &cosmo->T_nu);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        /* Read the N_nu attribute */
-        h_attr = H5Aopen(h_grp, "N_nu", H5P_DEFAULT);
-        h_err = H5Aread(h_attr, H5T_NATIVE_INT, &cosmo->N_nu);
-        H5Aclose(h_attr);
-        assert(h_err >= 0);
-
-        if (cosmo->N_nu > 0) {
-            /* Allocate memory for the neutrino mass array */
-            cosmo->M_nu = malloc(cosmo->N_nu * sizeof(double));
-
-            /* Read the N_nu attribute */
-            h_attr = H5Aopen(h_grp, "M_nu", H5P_DEFAULT);
-            h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, cosmo->M_nu);
-            H5Aclose(h_attr);
-            assert(h_err >= 0);
-        }
-
-        /* Convert h to H_0 in internal units */
-        cosmo->H_0 = cosmo->h * 100 * KM_METRES / MPC_METRES * us->UnitTimeSeconds;
-        cosmo->log_a_begin = log(cosmo->a_begin);
-        cosmo->log_a_end = log(cosmo->a_end);
-
-
-        intregateCosmologyTables(cosmo);
-
-        printf("The value was %f\n", cosmo->a_end);
-
-        /* Close the Cosmology group */
-        H5Gclose(h_grp);
-    } else {
-        printf("Error: Cosmology group does not exist.\n");
-        return 1;
-    }
-
-    return 0;
-}
 
 int cleanCosmology(struct cosmology *cosmo) {
     if (cosmo->N_nu > 0) {
@@ -139,20 +40,27 @@ int cleanCosmology(struct cosmology *cosmo) {
 
 /* Hubble constant at redshift z */
 double E_z(double a, struct cosmology *cosmo) {
-    double a_inv = 1./a;
-    double a_inv2 = a_inv * a_inv;
-    double a_inv3 = a_inv2 * a_inv;
-    double a_inv4 = a_inv2 * a_inv2;
+    // double a_inv = 1./a;
+    // double a_inv2 = a_inv * a_inv;
+    // double a_inv3 = a_inv2 * a_inv;
+    // double a_inv4 = a_inv2 * a_inv2;
+    //
+    // double Omega_m = cosmo->Omega_m;
+    // double Omega_r = cosmo->Omega_r;
+    // double Omega_k = cosmo->Omega_k;
+    // double Omega_lambda = cosmo->Omega_lambda;
+    //
+    // return sqrt(Omega_r * a_inv4 +
+    //             Omega_m * a_inv3 +
+    //             Omega_k * a_inv2 +
+    //             Omega_lambda);
 
-    double Omega_m = cosmo->Omega_m;
-    double Omega_r = cosmo->Omega_r;
-    double Omega_k = cosmo->Omega_k;
-    double Omega_lambda = cosmo->Omega_lambda;
+    double z = 1./a - 1;
+    double log_tau = perturbLogTauAtRedshift(cosmo->spline, z);
 
-    return sqrt(Omega_r * a_inv4 +
-                Omega_m * a_inv3 +
-                Omega_k * a_inv2 +
-                Omega_lambda);
+    return perturbHubbleAtLogTau(cosmo->spline, log_tau) / cosmo->H_0;
+
+
 }
 
 double drift_integrand(double a, void *params) {
@@ -180,8 +88,8 @@ int intregateCosmologyTables(struct cosmology *cosmo) {
     cosmo->log_a_table = malloc(cosmo_table_length * sizeof(double));
 
     /* Create a table of scale-factors between a_begin and a_end */
-    double log_a_begin = log(cosmo->a_begin);
-    double log_a_end = log(cosmo->a_end);
+    double log_a_begin = cosmo->log_a_begin;
+    double log_a_end = cosmo->log_a_end;
     double log_a_step = (log_a_end - log_a_begin) /
                             ((double) cosmo_table_length);
     for (int i=0; i<cosmo_table_length; i++) {
@@ -198,7 +106,7 @@ int intregateCosmologyTables(struct cosmology *cosmo) {
     gsl_function F = {&drift_integrand, cosmo};
     for (int i = 0; i < cosmo_table_length; i++) {
         gsl_integration_qag(&F, cosmo->a_begin, exp(cosmo->log_a_table[i]), 0,
-                            1.0e-10, workspace_size, GSL_INTEG_GAUSS61, space,
+                            1.0e-8, workspace_size, GSL_INTEG_GAUSS61, space,
                             &result, &abserr);
 
         cosmo->drift_factor_table[i] = result;
@@ -208,7 +116,7 @@ int intregateCosmologyTables(struct cosmology *cosmo) {
     F.function = &kick_integrand;
     for (int i = 0; i < cosmo_table_length; i++) {
         gsl_integration_qag(&F, cosmo->a_begin, exp(cosmo->log_a_table[i]), 0,
-                            1.0e-10, workspace_size, GSL_INTEG_GAUSS61, space,
+                            1.0e-8, workspace_size, GSL_INTEG_GAUSS61, space,
                             &result, &abserr);
 
         cosmo->kick_factor_table[i] = result;
