@@ -357,7 +357,7 @@ int main(int argc, char *argv[]) {
             // if (i == 4) {
             //     double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
             //     double f = fermi_dirac_density(p_eV, T_eV);
-            // 
+            //
             //     printf("%e %e %e %e %e %e\n", a, relat_kick_correction, relat_drift_correction, ui * relat_drift_correction, 2 * p->v_i / (a * c), a * c / p->v_i);
             //
             //     // printf("%e %f %f %f %f %f %f %e %e\n", a, p->x[0], p->x[1], p->x[2], hypot3(p->v[0], p->v[1], p->v[2]) * relat_drift_correction / (a*c), hypot3(p->v[0], p->v[1], p->v[2]), p_eV, f, (p->f_i - f)/p->f_i);
@@ -397,7 +397,7 @@ int main(int argc, char *argv[]) {
             /* Compute summary statistic */
             I_df *= 0.5 / pars.NumPartGenerate * weight_compute_invfreq;
 
-            // message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
+            message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
         }
     }
 
