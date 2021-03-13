@@ -348,9 +348,9 @@ int main(int argc, char *argv[]) {
             double drift = drift_factor * relat_drift_correction;
 
             /* Execute kick */
-            p->v[0] += (-acc[0]) * kick * epsfac * (1 + relat_extra_correction);
-            p->v[1] += (-acc[1]) * kick * epsfac * (1 + relat_extra_correction);
-            p->v[2] += (-acc[2]) * kick * epsfac * (1 + relat_extra_correction);
+            p->v[0] += (-acc[0]) * kick * epsfac * a * (1 + relat_extra_correction);
+            p->v[1] += (-acc[1]) * kick * epsfac * a * (1 + relat_extra_correction);
+            p->v[2] += (-acc[2]) * kick * epsfac * a * (1 + relat_extra_correction);
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift;
