@@ -344,18 +344,18 @@ int main(int argc, char *argv[]) {
             double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
 
             /* Compute the overall kick and drift step sizes */
-            double kick = kick_factor * relat_kick_correction * us.GravityG;
+            double kick = kick_factor * us.GravityG;
             double drift = drift_factor * relat_drift_correction;
 
             /* Execute kick */
-            p->v[0] += (-acc[0] + acc_chi[0] * relat_stress_correction) * kick;
-            p->v[1] += (-acc[1] + acc_chi[1] * relat_stress_correction) * kick;
-            p->v[2] += (-acc[2] + acc_chi[2] * relat_stress_correction) * kick;
+            p->v[0] += (-acc[0]) * kick * p->v[0] * (1 + ui * epsfac_inv);
+            p->v[1] += (-acc[1]) * kick * p->v[1] * (1 + ui * epsfac_inv);
+            p->v[2] += (-acc[2]) * kick * p->v[2] * (1 + ui * epsfac_inv);
 
             /* Execute drift */
-            p->x[0] += p->v[0] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
-            p->x[1] += p->v[1] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
-            p->x[2] += p->v[2] * drift * (1. + (3. - relat_extra_correction) * phi_c2 - chi_c2);
+            p->x[0] += p->v[0] * drift;
+            p->x[1] += p->v[1] * drift;
+            p->x[2] += p->v[2] * drift;
         }
 
         /* Step forward */
