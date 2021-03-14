@@ -349,7 +349,7 @@ int main(int argc, char *argv[]) {
 
             /* In the ultra-relavistic regime, use more accurate expressions */
             if (ui * relat_drift_correction > 0.9) {
-                kick = drift_factor * 2 * p->v_i / c * us.GravityG;
+                kick = hypot3(p->v[0], p->v[1], p->v[2]) * drift_factor * p->v_i / c * us.GravityG;
                 drift = kick_factor * c / p->v_i;
             }
 
