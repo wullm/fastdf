@@ -32,7 +32,6 @@ struct particle_ext {
     double mass;
     double f_i;
     double v_i;
-    double p;
 };
 
 #endif

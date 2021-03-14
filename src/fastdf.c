@@ -124,9 +124,7 @@ int main(int argc, char *argv[]) {
     /* Allocate another pair of boxes for the N-body gauge terms */
     fftw_complex *fbox_Nb1 = malloc(N*N*N*sizeof(fftw_complex));
     fftw_complex *fbox_Nb2 = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_complex *fbox_prime = malloc(N*N*N*sizeof(fftw_complex));
     double *box_chi = malloc(N*N*N*sizeof(double));
-    double *box_prime = malloc(N*N*N*sizeof(double));
 
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
@@ -212,7 +210,6 @@ int main(int argc, char *argv[]) {
 
         /* Compute the magnitude of the initial velocity */
         p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
-        p->p = p->v_i;
     }
 
     message(rank, "Done with pre-initial conditions.\n");
@@ -262,13 +259,11 @@ int main(int argc, char *argv[]) {
         int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
         int index_H_p = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
         int index_H_pp = findTitle(ptdat.titles, "H_T_Nb_prime_prime", ptdat.n_functions);
-        int index_prime = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_phi, tau_index, u_tau};
         struct spline_params sp_Nb1 = {&spline, index_H_p, tau_index, u_tau};
         struct spline_params sp_Nb2 = {&spline, index_H_pp, tau_index, u_tau};
-        struct spline_params sp_prime = {&spline, index_prime, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
@@ -276,7 +271,6 @@ int main(int argc, char *argv[]) {
         /* Apply the transfer function (read only fgrf, output into fbox_Nbx) */
         fft_apply_kernel(fbox_Nb1, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nb1);
         fft_apply_kernel(fbox_Nb2, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nb2);
-        fft_apply_kernel(fbox_prime, fgrf, N, BoxLen, kernel_transfer_function, &sp_prime);
 
         /* Hubble constant at this redshift */
         double H = cosmo.H_0 * E_z(a, &cosmo);
@@ -300,16 +294,10 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box_chi, N, BoxLen);
         fftw_destroy_plan(c2r2);
 
-        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox_prime, box_prime, FFTW_ESTIMATE);
-        fft_execute(c2r3);
-        fft_normalize_c2r(box_prime, N, BoxLen);
-        fftw_destroy_plan(c2r3);
-
         /* Multiply by the potential factor */
         for (int i=0; i<N*N*N; i++) {
             box[i] *= potential_factor;
             box_chi[i] *= potential_factor;
-            box_prime[i] *= -potential_factor / 6;
         }
 
         if (rank == 0 && pars.OutputFields) {
@@ -320,10 +308,6 @@ int main(int argc, char *argv[]) {
             char chi_fname[50];
             sprintf(chi_fname, "%s/chi_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box_chi, N, BoxLen, chi_fname);
-
-            char prime_fname[50];
-            sprintf(prime_fname, "%s/prime_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box_prime, N, BoxLen, prime_fname);
         }
 
         /* Fetch the cosmological kick and drift factors */
@@ -349,10 +333,6 @@ int main(int argc, char *argv[]) {
             double phi_c2 = phi / (c * c * potential_factor);
             double chi_c2 = chi / (c * c * potential_factor);
 
-
-            double phi_prime = gridCIC(box_prime, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_prime_c2 = phi_prime / (c * c * potential_factor);
-
             /* Fetch the relativistic correction factors */
             double ui = p->v_i / (a * c);
             double ui2 = ui * ui;
@@ -364,47 +344,29 @@ int main(int argc, char *argv[]) {
             double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
 
             /* Compute the overall kick and drift step sizes */
-            // double kick = kick_factor * relat_kick_correction * us.GravityG;
-            // double drift = drift_factor * relat_drift_correction;
-
-            // double kick = kick_factor * us.GravityG;
-            // double drift = drift_factor * relat_drift_correction;
+            double kick = kick_factor * relat_kick_correction * us.GravityG;
+            double drift = drift_factor * relat_drift_correction;
 
             /* In the ultra-relavistic regime, use more accurate expressions */
-            // if (ui * relat_drift_correction > 0.9) {
-            // if (true) {
-                double kick = kick_factor * 2 * p->v_i / c * us.GravityG;
-                double drift = drift_factor * c / p->v_i;
-            // }
-
-            //  else
-            // {
-            //     kick = kick_factor * relat_kick_correction * us.GravityG;
-            //     drift = drift_factor * relat_drift_correction;
-            // }
+            if (ui * relat_drift_correction > 0.9) {
+                kick = drift_factor * 2 * p->v_i / c * us.GravityG;
+                drift = kick_factor * c / p->v_i;
+            }
 
             // printf("%e %e\n", 1/(relat_drift_correction*relat_drift_correction), phi_c2);
             // if (i == 4) {
             //     double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
             //     double f = fermi_dirac_density(p_eV, T_eV);
             //
-            //     double pa = p->v_i * m_eV / us.SpeedOfLight;
-            //     double fa = fermi_dirac_density(pa, T_eV);
+            //     printf("%e %e %e %e %e %e\n", a, relat_kick_correction, relat_drift_correction, ui * relat_drift_correction, 2 * p->v_i / (a * c), a * c / p->v_i);
             //
-            //     printf("%e %e %e %e %e\n", a, p->v_i, p->v[0], (p->f_i - f)/p->f_i, (p->f_i - fa)/p->f_i);
-            //
-            //     // printf("%e %e %e %e %e %e\n", a, kick_factor * relat_kick_correction * us.GravityG, drift_factor * relat_drift_correction, ui * relat_drift_correction, kick, drift);
-            //
-            //     // printf("%e %e %e %e %e %e\n", a, relat_kick_correction, relat_drift_correction, ui * relat_drift_correction, 2 * p->v_i / (a * c), a * c / p->v_i);
-            //
-            //     // printf("%e %f %f %f %f %f %f %e %e %e\n", a, p->x[0], p->x[1], p->x[2], hypot3(p->v[0], p->v[1], p->v[2]) * relat_drift_correction / (a*a*c), hypot3(p->v[0], p->v[1], p->v[2]), p_eV, f, (p->f_i - f)/p->f_i, relat_kick_correction * a);
+            //     // printf("%e %f %f %f %f %f %f %e %e\n", a, p->x[0], p->x[1], p->x[2], hypot3(p->v[0], p->v[1], p->v[2]) * relat_drift_correction / (a*c), hypot3(p->v[0], p->v[1], p->v[2]), p_eV, f, (p->f_i - f)/p->f_i);
             // }
 
             /* Execute kick */
             p->v[0] += (-acc[0]) * kick;
             p->v[1] += (-acc[1]) * kick;
             p->v[2] += (-acc[2]) * kick;
-            p->p += p->p * kick * (phi_prime_c2 - (acc[0] + acc[1] + acc[2]) * us.GravityG);
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift;
@@ -426,7 +388,7 @@ int main(int argc, char *argv[]) {
             for (int i=0; i<localParticleNumber; i+=weight_compute_invfreq) {
                 struct particle_ext *p = &genparts[i];
 
-                double p_eV = p->p * m_eV / us.SpeedOfLight;
+                double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
                 double f = fermi_dirac_density(p_eV, T_eV);
                 double w = (p->f_i - f)/p->f_i;
                 I_df += w*w;
@@ -446,8 +408,6 @@ int main(int argc, char *argv[]) {
     free(fbox_Nb1);
     free(fbox_Nb2);
     free(box_chi);
-    free(box_prime);
-    free(fbox_prime);
 
     /* Final operations before writing the particles to disk */
     #pragma omp parallel for
@@ -460,7 +420,7 @@ int main(int argc, char *argv[]) {
         p->x[2] = fwrap(p->x[2], BoxLen);
 
         /* Update the mass (needs to happen before converting the velocities!)*/
-        double p_eV = p->p * m_eV / us.SpeedOfLight;
+        double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
         double f = fermi_dirac_density(p_eV, T_eV);
         double eps_eV = hypot(p_eV/a_end, m_eV);
         double eps = particle_mass / m_eV * eps_eV;
