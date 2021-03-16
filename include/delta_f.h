@@ -85,7 +85,7 @@ static inline double sampleGaussian(uint64_t *state) {
  */
 static inline double fermi_dirac_momentum(double *v, double m_eV, double c) {
     const double u = hypot3(v[0], v[1], v[2]);
-    const double p_eV = u * m_eV / c;
+    const double p_eV = u;
 
     return p_eV;
 }
@@ -125,7 +125,7 @@ static void init_neutrino_particle(uint64_t seed, double m_eV, double *v,
     /* The corresponding initial Fermi-Dirac momentum */
     const double p_eV = fermi_dirac_transform(z) * T_eV;
     /* The corresponding velocity */
-    const double u = p_eV * c / m_eV;
+    const double u = p_eV;
 
     /* Generate a random point uniformly on the sphere */
     double nx = sampleGaussian(&seed);
