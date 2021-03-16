@@ -347,9 +347,9 @@ int main(int argc, char *argv[]) {
             p->v[2] += (-acc[2] * relat_kick_correction + epsfac * acc_chi[2]) * kick / c;
 
             /* Execute drift */
-            p->x[0] += p->v[0] * drift * c;
-            p->x[1] += p->v[1] * drift * c;
-            p->x[2] += p->v[2] * drift * c;
+            p->x[0] += p->v[0] * drift * c * (1 + (3 - q*q * epsfac_inv * epsfac_inv) * phi_c2 - chi_c2);
+            p->x[1] += p->v[1] * drift * c * (1 + (3 - q*q * epsfac_inv * epsfac_inv) * phi_c2 - chi_c2);
+            p->x[2] += p->v[2] * drift * c * (1 + (3 - q*q * epsfac_inv * epsfac_inv) * phi_c2 - chi_c2);
         }
 
         /* Step forward */
