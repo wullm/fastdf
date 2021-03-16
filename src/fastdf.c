@@ -353,16 +353,6 @@ int main(int argc, char *argv[]) {
                 drift = kick_factor * c / p->v_i;
             }
 
-            // printf("%e %e\n", 1/(relat_drift_correction*relat_drift_correction), phi_c2);
-            // if (i == 4) {
-            //     double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
-            //     double f = fermi_dirac_density(p_eV, T_eV);
-            //
-            //     printf("%e %e %e %e %e %e\n", a, relat_kick_correction, relat_drift_correction, ui * relat_drift_correction, 2 * p->v_i / (a * c), a * c / p->v_i);
-            //
-            //     // printf("%e %f %f %f %f %f %f %e %e\n", a, p->x[0], p->x[1], p->x[2], hypot3(p->v[0], p->v[1], p->v[2]) * relat_drift_correction / (a*c), hypot3(p->v[0], p->v[1], p->v[2]), p_eV, f, (p->f_i - f)/p->f_i);
-            // }
-
             /* Execute kick */
             p->v[0] += (-acc[0]) * kick;
             p->v[1] += (-acc[1]) * kick;
