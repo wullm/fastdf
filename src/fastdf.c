@@ -288,6 +288,7 @@ int main(int argc, char *argv[]) {
         for (int i=0; i<N*N*N; i++) {
             box[i] *= potential_factor;
             box_chi[i] *= potential_factor;
+            box_chi[i] = box[i] - box_chi[i];
         }
 
         if (rank == 0 && pars.OutputFields) {
@@ -331,7 +332,7 @@ int main(int argc, char *argv[]) {
             double ui2 = ui * ui;
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1./epsfac;
-            double relat_kick_correction = (q*q) * epsfac_inv;
+            double relat_kick_correction = (2 * q*q + a*a*m_eV*m_eV) * epsfac_inv;
             double relat_drift_correction = epsfac_inv;
             double relat_stress_correction = epsfac / relat_kick_correction;
             double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
