@@ -247,7 +247,7 @@ int main(int argc, char *argv[]) {
         }
 
         /* Retrieve physical constants */
-        const double potential_factor = a / us.GravityG;
+        const double potential_factor = 1.0 / us.GravityG;
         const double c = us.SpeedOfLight;
 
         /* Find the interpolation index along the time dimension */
@@ -323,11 +323,11 @@ int main(int argc, char *argv[]) {
             double chi_c2 = chi / (c * c * potential_factor);
 
             /* Fetch the relativistic correction factors */
-            double ui = p->v_i / (a * c);
+            double ui = p->v_i / c;
             double ui2 = ui * ui;
-            double epsfac = hypot(ui, 1);
+            double epsfac = hypot(ui, a);
             double epsfac_inv = 1./epsfac;
-            double relat_kick_correction = (2 * ui2 + 1) * epsfac_inv;
+            double relat_kick_correction = (2 * ui2 + a*a) * epsfac_inv;
             double relat_drift_correction = epsfac_inv;
             double relat_stress_correction = epsfac / relat_kick_correction;
             double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
@@ -337,9 +337,9 @@ int main(int argc, char *argv[]) {
             double drift = drift_factor * relat_drift_correction;
 
             /* Execute kick */
-            p->v[0] += (-acc[0] * relat_kick_correction * relat_drift_correction + acc_chi[0]) * kick;
-            p->v[1] += (-acc[1] * relat_kick_correction * relat_drift_correction + acc_chi[1]) * kick;
-            p->v[2] += (-acc[2] * relat_kick_correction * relat_drift_correction + acc_chi[2]) * kick;
+            p->v[0] += (-acc[0] * relat_kick_correction + epsfac * acc_chi[0]) * kick;
+            p->v[1] += (-acc[1] * relat_kick_correction + epsfac * acc_chi[1]) * kick;
+            p->v[2] += (-acc[2] * relat_kick_correction + epsfac * acc_chi[2]) * kick;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift;
