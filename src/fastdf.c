@@ -239,11 +239,13 @@ int main(int argc, char *argv[]) {
         double log_tau = perturbLogTauAtRedshift(&spline, z);
 
         /* Determine the next scale factor */
-        double a_next;
+        double a_next, a_half;
         if (ITER < MAX_ITER - 1) {
             a_next = a * a_factor;
+            a_half = sqrt(a_next * a);
         } else {
             a_next = a_end;
+            a_half = sqrt(a_next * a);
         }
 
         /* Retrieve physical constants */
@@ -302,6 +304,8 @@ int main(int argc, char *argv[]) {
         /* Fetch the cosmological kick and drift factors */
         double kick_factor = get_kick_factor(&cosmo, log(a), log(a_next));
         double drift_factor = get_drift_factor(&cosmo, log(a), log(a_next));
+        double kick_factor1 = get_kick_factor(&cosmo, log(a), log(a_half));
+        double kick_factor2 = get_kick_factor(&cosmo, log(a_half), log(a_next));
 
         /* Integrate the particles */
         #pragma omp parallel for
@@ -333,18 +337,28 @@ int main(int argc, char *argv[]) {
             double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
 
             /* Compute the overall kick and drift step sizes */
-            double kick = kick_factor * us.GravityG;
+            double kick1 = kick_factor1 * us.GravityG;
+            double kick2 = kick_factor2 * us.GravityG;
             double drift = kick_factor * relat_drift_correction;
 
             /* Execute kick */
-            p->v[0] += (-acc[0] * relat_kick_correction + epsfac * acc_chi[0]) * kick;
-            p->v[1] += (-acc[1] * relat_kick_correction + epsfac * acc_chi[1]) * kick;
-            p->v[2] += (-acc[2] * relat_kick_correction + epsfac * acc_chi[2]) * kick;
+            p->v[0] += (-acc[0] * relat_kick_correction + epsfac * acc_chi[0]) * kick1;
+            p->v[1] += (-acc[1] * relat_kick_correction + epsfac * acc_chi[1]) * kick1;
+            p->v[2] += (-acc[2] * relat_kick_correction + epsfac * acc_chi[2]) * kick1;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift;
             p->x[1] += p->v[1] * drift;
             p->x[2] += p->v[2] * drift;
+
+            /* Obtain new derivative */
+            accelCIC(box, N, BoxLen, p->x, acc);
+            accelCIC(box_chi, N, BoxLen, p->x, acc_chi);
+
+            /* Execute second kick */
+            p->v[0] += (-acc[0] * relat_kick_correction + epsfac * acc_chi[0]) * kick2;
+            p->v[1] += (-acc[1] * relat_kick_correction + epsfac * acc_chi[1]) * kick2;
+            p->v[2] += (-acc[2] * relat_kick_correction + epsfac * acc_chi[2]) * kick2;
         }
 
         /* Step forward */
