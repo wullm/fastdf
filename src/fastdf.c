@@ -257,31 +257,19 @@ int main(int argc, char *argv[]) {
 
         /* The indices of the potential transfer function */
         int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
+        int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
         int index_H_p = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
         int index_H_pp = findTitle(ptdat.titles, "H_T_Nb_prime_prime", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_phi, tau_index, u_tau};
+        struct spline_params sp2 = {&spline, index_psi, tau_index, u_tau};
         struct spline_params sp_Nb1 = {&spline, index_H_p, tau_index, u_tau};
         struct spline_params sp_Nb2 = {&spline, index_H_pp, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
-
-        /* Apply the transfer function (read only fgrf, output into fbox_Nbx) */
-        fft_apply_kernel(fbox_Nb1, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nb1);
-        fft_apply_kernel(fbox_Nb2, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nb2);
-
-        /* Hubble constant at this redshift */
-        double H = cosmo.H_0 * E_z(a, &cosmo);
-
-        /* Add the N-body gauge terms */
-        for (int i=0; i<N*N*(N/2+1); i++) {
-            fbox_Nb1[i] = (fbox_Nb1[i] * H * a + fbox_Nb2[i]);
-        }
-
-        /* Solve Poisson equation */
-        fft_apply_kernel(fbox_Nb1, fbox_Nb1, N, BoxLen, kernel_inv_poisson, NULL);
+        fft_apply_kernel(fbox_Nb1, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -298,6 +286,7 @@ int main(int argc, char *argv[]) {
         for (int i=0; i<N*N*N; i++) {
             box[i] *= potential_factor;
             box_chi[i] *= potential_factor;
+            box_chi[i] = box[i] - box_chi[i];
         }
 
         if (rank == 0 && pars.OutputFields) {
@@ -344,19 +333,13 @@ int main(int argc, char *argv[]) {
             double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
 
             /* Compute the overall kick and drift step sizes */
-            double kick = kick_factor * relat_kick_correction * us.GravityG;
+            double kick = kick_factor * us.GravityG;
             double drift = drift_factor * relat_drift_correction;
 
-            /* In the ultra-relavistic regime, use more accurate expressions */
-            if (ui * relat_drift_correction > 0.9) {
-                kick = hypot3(p->v[0], p->v[1], p->v[2]) * drift_factor * p->v_i / c * us.GravityG;
-                drift = kick_factor * c / p->v_i;
-            }
-
             /* Execute kick */
-            p->v[0] += (-acc[0]) * kick;
-            p->v[1] += (-acc[1]) * kick;
-            p->v[2] += (-acc[2]) * kick;
+            p->v[0] += (-acc[0] * relat_kick_correction * relat_drift_correction + acc_chi[0]) * kick;
+            p->v[1] += (-acc[1] * relat_kick_correction * relat_drift_correction + acc_chi[1]) * kick;
+            p->v[2] += (-acc[2] * relat_kick_correction * relat_drift_correction + acc_chi[2]) * kick;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift;
