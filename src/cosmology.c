@@ -161,7 +161,7 @@ double drift_integrand(double a, void *params) {
     double a_inv = 1./a;
     double H_0 = cosmo->H_0;
     double H = H_0 * E_z(a, cosmo);
-    return (1. / H) * a_inv * a_inv;
+    return (1. / H) * a_inv * a_inv * a_inv;
 }
 
 double kick_integrand(double a, void *params) {
@@ -170,7 +170,7 @@ double kick_integrand(double a, void *params) {
     double a_inv = 1./a;
     double H_0 = cosmo->H_0;
     double H = H_0 * E_z(a, cosmo);
-    return (1. / H) * a_inv;
+    return (1. / H) * a_inv * a_inv;
 }
 
 int intregateCosmologyTables(struct cosmology *cosmo) {

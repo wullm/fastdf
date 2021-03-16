@@ -334,7 +334,7 @@ int main(int argc, char *argv[]) {
 
             /* Compute the overall kick and drift step sizes */
             double kick = kick_factor * us.GravityG;
-            double drift = drift_factor * relat_drift_correction;
+            double drift = kick_factor * relat_drift_correction;
 
             /* Execute kick */
             p->v[0] += (-acc[0] * relat_kick_correction + epsfac * acc_chi[0]) * kick;
