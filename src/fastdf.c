@@ -327,38 +327,29 @@ int main(int argc, char *argv[]) {
             double chi_c2 = chi / (c * c * potential_factor);
 
             /* Fetch the relativistic correction factors */
-            double ui = p->v_i / c;
+            double q = hypot3(p->v[0], p->v[1], p->v[2]);
+            double ui = p->v_i;
             double ui2 = ui * ui;
-            double epsfac = hypot(ui, a);
+            double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1./epsfac;
-            double relat_kick_correction = (2 * ui2 + a*a) * epsfac_inv;
+            double relat_kick_correction = (2 * q*q + a*a*m_eV*m_eV) * epsfac_inv;
             double relat_drift_correction = epsfac_inv;
             double relat_stress_correction = epsfac / relat_kick_correction;
             double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
 
             /* Compute the overall kick and drift step sizes */
-            double kick1 = kick_factor1 * us.GravityG;
-            double kick2 = kick_factor2 * us.GravityG;
+            double kick = kick_factor * us.GravityG;
             double drift = kick_factor * relat_drift_correction;
 
             /* Execute kick */
-            p->v[0] += (-acc[0] * relat_kick_correction + epsfac * acc_chi[0]) * kick1;
-            p->v[1] += (-acc[1] * relat_kick_correction + epsfac * acc_chi[1]) * kick1;
-            p->v[2] += (-acc[2] * relat_kick_correction + epsfac * acc_chi[2]) * kick1;
+            p->v[0] += (-acc[0] * relat_kick_correction + epsfac * acc_chi[0]) * kick;
+            p->v[1] += (-acc[1] * relat_kick_correction + epsfac * acc_chi[1]) * kick;
+            p->v[2] += (-acc[2] * relat_kick_correction + epsfac * acc_chi[2]) * kick;
 
             /* Execute drift */
-            p->x[0] += p->v[0] * drift;
-            p->x[1] += p->v[1] * drift;
-            p->x[2] += p->v[2] * drift;
-
-            /* Obtain new derivative */
-            accelCIC(box, N, BoxLen, p->x, acc);
-            accelCIC(box_chi, N, BoxLen, p->x, acc_chi);
-
-            /* Execute second kick */
-            p->v[0] += (-acc[0] * relat_kick_correction + epsfac * acc_chi[0]) * kick2;
-            p->v[1] += (-acc[1] * relat_kick_correction + epsfac * acc_chi[1]) * kick2;
-            p->v[2] += (-acc[2] * relat_kick_correction + epsfac * acc_chi[2]) * kick2;
+            p->x[0] += p->v[0] * drift * c;
+            p->x[1] += p->v[1] * drift * c;
+            p->x[2] += p->v[2] * drift * c;
         }
 
         /* Step forward */
