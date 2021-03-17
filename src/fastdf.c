@@ -375,7 +375,7 @@ int main(int argc, char *argv[]) {
             /* Compute summary statistic */
             I_df *= 0.5 / pars.NumPartGenerate * weight_compute_invfreq;
 
-            // message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
+            message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
         }
     }
 
