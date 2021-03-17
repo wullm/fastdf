@@ -291,19 +291,6 @@ int main(int argc, char *argv[]) {
         p->v[1] *= 1 + deltaT;
         p->v[2] *= 1 + deltaT;
 
-        /* Get the velocity perturbation */
-        double deldnu[3];
-        accelCIC(box, N, BoxLen, p->x, deldnu);
-
-        deldnu[0] *= tau_begin / 12 * c * c;
-        deldnu[1] *= tau_begin / 12 * c * c;
-        deldnu[2] *= tau_begin / 12 * c * c;
-
-        /* Apply the perturbation */
-        p->v[0] *= 1 + deldnu[0];
-        p->v[1] *= 1 + deldnu[1];
-        p->v[2] *= 1 + deldnu[2];
-
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         /* Compute initial phase space density */
