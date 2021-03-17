@@ -27,6 +27,32 @@
 
 #include "../include/fastdf.h"
 
+/* Fermi-Dirac distribution function */
+double f0(double q) {
+    double ksi = 0; //potential
+    return 1.0/pow(2*M_PI,3)*(1./(exp(q-ksi)+1.) +1./(exp(q+ksi)+1.));
+}
+
+/* Logarithmic derivative of distribution function */
+double compute_dlnf0_dlnq(double q, double h) {
+    double df0_dq = 0, dlnf0_dlnq;
+
+    df0_dq += (1./12.) * f0(q - 2*h);
+    df0_dq -= (8./12.) * f0(q - 1*h);
+    df0_dq += (8./12.) * f0(q + 1*h);
+    df0_dq -= (1./12.) * f0(q + 2*h);
+    df0_dq /= h;
+
+    double f0_eval = f0(q);
+    if (fabs(f0_eval) > 0) {
+        dlnf0_dlnq = q/f0_eval * df0_dq;
+    } else {
+        dlnf0_dlnq = -q;
+    }
+
+    return dlnf0_dlnq;
+}
+
 int main(int argc, char *argv[]) {
     if (argc == 1) {
         printf("No parameter file specified.\n");
@@ -125,6 +151,10 @@ int main(int argc, char *argv[]) {
     fftw_complex *fbox_Nb1 = malloc(N*N*N*sizeof(fftw_complex));
     fftw_complex *fbox_Nb2 = malloc(N*N*N*sizeof(fftw_complex));
     double *box_chi = malloc(N*N*N*sizeof(double));
+    double *box_extra1 = malloc(N*N*N*sizeof(double));
+
+
+    fftw_complex *fbox_extra1 = malloc(N*N*N*sizeof(fftw_complex));
 
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
@@ -183,34 +213,110 @@ int main(int argc, char *argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
+    header(rank, "Generating pre-initial grids");
+    {
+        double z_begin = 1./cosmo.a_begin - 1;
+        double log_tau = perturbLogTauAtRedshift(&spline, z_begin);
+
+        /* Find the interpolation index along the time dimension */
+        int tau_index; //greatest lower bound bin index
+        double u_tau; //spacing between subsequent bins
+        perturbSplineFindTau(&spline, log_tau, &tau_index, &u_tau);
+
+        /* The indices of the potential transfer function */
+        int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
+
+        /* Package the perturbation theory interpolation spline parameters */
+        struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
+
+        /* Apply the transfer function (read only fgrf, output into fbox) */
+        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
+
+        /* Fourier transform to real space */
+        fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
+        fft_execute(c2r);
+        fft_normalize_c2r(box, N, BoxLen);
+        fftw_destroy_plan(c2r);
+
+        /* Retrieve  physical constant */
+        const double c = us.SpeedOfLight;
+
+        /* Multiply by the appropriate factor */
+        for (int i=0; i<N*N*N; i++) {
+            box[i] *= -2 / (c * c);
+        }
+
+        if (rank == 0 && pars.OutputFields) {
+            char dnu_fname[50];
+            sprintf(dnu_fname, "%s/ic_dnu.hdf5", pars.OutputDirectory);
+            writeFieldFile(box, N, BoxLen, dnu_fname);
+        }
+
+    }
+
+
     header(rank, "Generating pre-initial conditions");
     message(rank, "ID of first particle = %lld\n", firstID);
     message(rank, "T_nu = %e eV\n", T_eV);
 
     /* Generate random neutrino particles */
-    #pragma omp parallel for
+    int thermal_draws = 0;
     for (int i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
         /* Set the ID of the particle */
-        long long id = i + firstID;
+        uint64_t id = i + firstID;
 
-        /* Generate random particle velocity and position */
-        init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
+        char accept = 0;
 
-        /* Compute the momentum in eV */
-        const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
-        const double f_i = fermi_dirac_density(p_eV, T_eV);
+        while(!accept) {
+            /* Generate random particle velocity and position */
+            init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
 
-        if (i==0)
-        message(rank, "First random momentum = %e eV\n", p_eV);
+            thermal_draws++;
 
-        /* Compute initial phase space density */
-        p->f_i = f_i;
+            /* Compute the momentum in eV */
+            const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+            const double f_i = fermi_dirac_density(p_eV, T_eV);
 
-        /* Compute the magnitude of the initial velocity */
-        p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
+
+            /* Determine the density perturbation at this point */
+            double dnu = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double q = hypot3(p->v[0], p->v[1], p->v[2]);
+            double dlnfdlnq = compute_dlnf0_dlnq(p_eV/T_eV, 1e-3);
+            double Psi0 = -0.25 * dnu * dlnfdlnq;
+
+            double Psi = Psi0;
+
+            double base_accept = 1.0 - 1e-2;
+            double p_accept = base_accept * (1 + Psi);
+
+            if (p_accept > 1) {
+                printf("ERROR: rejection sampler encountered P(accept) > 1\t [q, Psi, P] = [%f, %e, %e].\n", q, Psi, p_accept);
+                exit(1);
+            }
+
+            /* Draw a uniform random number */
+            double u = sampleUniform(&id);
+
+            /* Do we accept? */
+            if (u < p_accept) {
+                accept = 1;
+            }
+
+            if (i==0)
+            message(rank, "First random momentum = %e eV\n", p_eV);
+
+            /* Compute initial phase space density */
+            p->f_i = f_i;
+
+            /* Compute the magnitude of the initial velocity */
+            p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
+
+        }
     }
+
+    message(rank, "Acceptance probability: %f\n", 1-(double)localParticleNumber/thermal_draws);
 
     message(rank, "Done with pre-initial conditions.\n");
 
