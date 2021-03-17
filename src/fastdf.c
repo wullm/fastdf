@@ -213,15 +213,18 @@ int main(int argc, char *argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
+    double z_begin = 1./cosmo.a_begin - 1;
+    double log_tau_begin = perturbLogTauAtRedshift(&spline, z_begin);
+    double tau_begin = exp(log_tau_begin);
+
     header(rank, "Generating pre-initial grids");
     {
-        double z_begin = 1./cosmo.a_begin - 1;
-        double log_tau = perturbLogTauAtRedshift(&spline, z_begin);
+
 
         /* Find the interpolation index along the time dimension */
         int tau_index; //greatest lower bound bin index
         double u_tau; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau, &tau_index, &u_tau);
+        perturbSplineFindTau(&spline, log_tau_begin, &tau_index, &u_tau);
 
         /* The indices of the potential transfer function */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
@@ -258,6 +261,9 @@ int main(int argc, char *argv[]) {
     message(rank, "ID of first particle = %lld\n", firstID);
     message(rank, "T_nu = %e eV\n", T_eV);
 
+    /* Retrieve  physical constant */
+    const double c = us.SpeedOfLight;
+
     /* Generate random neutrino particles */
     for (int i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
@@ -284,6 +290,19 @@ int main(int argc, char *argv[]) {
         p->v[0] *= 1 + deltaT;
         p->v[1] *= 1 + deltaT;
         p->v[2] *= 1 + deltaT;
+
+        /* Get the velocity perturbation */
+        double deldnu[3];
+        accelCIC(box, N, BoxLen, p->x, deldnu);
+
+        deldnu[0] *= tau_begin / 12 * c * c;
+        deldnu[1] *= tau_begin / 12 * c * c;
+        deldnu[2] *= tau_begin / 12 * c * c;
+
+        /* Apply the perturbation */
+        p->v[0] *= 1 + deldnu[0];
+        p->v[1] *= 1 + deldnu[1];
+        p->v[2] *= 1 + deldnu[2];
 
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
@@ -320,6 +339,8 @@ int main(int argc, char *argv[]) {
         /* Compute the current redshift and log conformal time */
         double z = 1./a - 1;
         double log_tau = perturbLogTauAtRedshift(&spline, z);
+
+        printf("%e %e\n", z, exp(log_tau));
 
         /* Determine the next scale factor */
         double a_next, a_half;
@@ -450,12 +471,12 @@ int main(int argc, char *argv[]) {
             double drift = kick_factor * relat_drift_correction;
 
             /* Execute kick */
-            // p->v[0] += (-acc[0] * relat_kick_correction - epsfac * acc_chi[0]) * kick / c;
-            // p->v[1] += (-acc[1] * relat_kick_correction - epsfac * acc_chi[1]) * kick / c;
-            // p->v[2] += (-acc[2] * relat_kick_correction - epsfac * acc_chi[2]) * kick / c;
-            p->v[0] += (phi_dot / c * q - epsfac * acc_chi[0]) * kick / c;
-            p->v[1] += (phi_dot / c * q - epsfac * acc_chi[1]) * kick / c;
-            p->v[2] += (phi_dot / c * q - epsfac * acc_chi[2]) * kick / c;
+            p->v[0] += (-acc[0] * relat_kick_correction - epsfac * acc_chi[0]) * kick / c;
+            p->v[1] += (-acc[1] * relat_kick_correction - epsfac * acc_chi[1]) * kick / c;
+            p->v[2] += (-acc[2] * relat_kick_correction - epsfac * acc_chi[2]) * kick / c;
+            // p->v[0] += (phi_dot / c * q - epsfac * acc_chi[0]) * kick / c;
+            // p->v[1] += (phi_dot / c * q - epsfac * acc_chi[1]) * kick / c;
+            // p->v[2] += (phi_dot / c * q - epsfac * acc_chi[2]) * kick / c;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift * c * (1 + (2 - q*q * epsfac_inv * epsfac_inv) * phi_c2 + chi_c2);
