@@ -285,7 +285,7 @@ int main(int argc, char *argv[]) {
         p->v[1] *= 1 + deltaT;
         p->v[2] *= 1 + deltaT;
 
-        const double f_i = fermi_dirac_density(p_eV * (1 + deltaT), T_eV);
+        const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         /* Compute initial phase space density */
         p->f_i = f_i;
