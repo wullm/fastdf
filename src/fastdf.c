@@ -340,6 +340,12 @@ int main(int argc, char *argv[]) {
         double u_tau; //spacing between subsequent bins
         perturbSplineFindTau(&spline, log_tau, &tau_index, &u_tau);
 
+        /* Find the interpolation index along the time dimension */
+        double log_tau2 = log_tau + 0.01;
+        int tau_index2; //greatest lower bound bin index
+        double u_tau2; //spacing between subsequent bins
+        perturbSplineFindTau(&spline, log_tau2, &tau_index2, &u_tau2);
+
         /* The indices of the potential transfer function */
         int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
@@ -352,9 +358,12 @@ int main(int argc, char *argv[]) {
         struct spline_params sp_Nb1 = {&spline, index_H_p, tau_index, u_tau};
         struct spline_params sp_Nb2 = {&spline, index_H_pp, tau_index, u_tau};
 
+        struct spline_params sp3 = {&spline, index_phi, tau_index2, u_tau2};
+
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
         fft_apply_kernel(fbox_Nb1, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
+        fft_apply_kernel(fbox_extra1, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -367,11 +376,20 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box_chi, N, BoxLen);
         fftw_destroy_plan(c2r2);
 
+        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox_extra1, box_extra1, FFTW_ESTIMATE);
+        fft_execute(c2r3);
+        fft_normalize_c2r(box_extra1, N, BoxLen);
+        fftw_destroy_plan(c2r3);
+
         /* Multiply by the potential factor */
         for (int i=0; i<N*N*N; i++) {
             box[i] *= potential_factor;
             box_chi[i] *= potential_factor;
             // box_chi[i] = box[i] - box_chi[i];
+
+            box_extra1[i] *= potential_factor;
+            box_extra1[i] -= box[i];
+            box_extra1[i] /= (exp(log_tau2) - exp(log_tau));
         }
 
         if (rank == 0 && pars.OutputFields) {
@@ -382,6 +400,10 @@ int main(int argc, char *argv[]) {
             char chi_fname[50];
             sprintf(chi_fname, "%s/chi_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box_chi, N, BoxLen, chi_fname);
+
+            char dot_fname[50];
+            sprintf(dot_fname, "%s/dotphi_%d.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box_extra1, N, BoxLen, dot_fname);
         }
 
         /* Fetch the cosmological kick and drift factors */
@@ -409,6 +431,9 @@ int main(int argc, char *argv[]) {
             double phi_c2 = phi / (c * c * potential_factor);
             double chi_c2 = chi / (c * c * potential_factor);
 
+
+            double phi_dot = gridCIC(box_extra1, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+
             /* Fetch the relativistic correction factors */
             double q = hypot3(p->v[0], p->v[1], p->v[2]);
             double ui = p->v_i;
@@ -425,9 +450,12 @@ int main(int argc, char *argv[]) {
             double drift = kick_factor * relat_drift_correction;
 
             /* Execute kick */
-            p->v[0] += (-acc[0] * relat_kick_correction - epsfac * acc_chi[0]) * kick / c;
-            p->v[1] += (-acc[1] * relat_kick_correction - epsfac * acc_chi[1]) * kick / c;
-            p->v[2] += (-acc[2] * relat_kick_correction - epsfac * acc_chi[2]) * kick / c;
+            // p->v[0] += (-acc[0] * relat_kick_correction - epsfac * acc_chi[0]) * kick / c;
+            // p->v[1] += (-acc[1] * relat_kick_correction - epsfac * acc_chi[1]) * kick / c;
+            // p->v[2] += (-acc[2] * relat_kick_correction - epsfac * acc_chi[2]) * kick / c;
+            p->v[0] += (phi_dot / c * q - epsfac * acc_chi[0]) * kick / c;
+            p->v[1] += (phi_dot / c * q - epsfac * acc_chi[1]) * kick / c;
+            p->v[2] += (phi_dot / c * q - epsfac * acc_chi[2]) * kick / c;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift * c * (1 + (2 - q*q * epsfac_inv * epsfac_inv) * phi_c2 + chi_c2);
