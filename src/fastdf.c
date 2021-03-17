@@ -270,7 +270,6 @@ int main(int argc, char *argv[]) {
 
         /* Compute the momentum in eV */
         const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
-        const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         if (i==0)
         message(rank, "First random momentum = %e eV\n", p_eV);
@@ -285,6 +284,8 @@ int main(int argc, char *argv[]) {
         p->v[0] *= 1 + deltaT;
         p->v[1] *= 1 + deltaT;
         p->v[2] *= 1 + deltaT;
+
+        const double f_i = fermi_dirac_density(p_eV * (1 + deltaT), T_eV);
 
         /* Compute initial phase space density */
         p->f_i = f_i;
