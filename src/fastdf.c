@@ -254,69 +254,45 @@ int main(int argc, char *argv[]) {
 
     }
 
-
     header(rank, "Generating pre-initial conditions");
     message(rank, "ID of first particle = %lld\n", firstID);
     message(rank, "T_nu = %e eV\n", T_eV);
 
     /* Generate random neutrino particles */
-    int thermal_draws = 0;
     for (int i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
         /* Set the ID of the particle */
         uint64_t id = i + firstID;
 
-        char accept = 0;
+        /* Generate random particle velocity and position */
+        init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
 
-        while(!accept) {
-            /* Generate random particle velocity and position */
-            init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
+        /* Compute the momentum in eV */
+        const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+        const double f_i = fermi_dirac_density(p_eV, T_eV);
 
-            thermal_draws++;
+        if (i==0)
+        message(rank, "First random momentum = %e eV\n", p_eV);
 
-            /* Compute the momentum in eV */
-            const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
-            const double f_i = fermi_dirac_density(p_eV, T_eV);
+        /* Determine the density perturbation at this point */
+        double dnu = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
+        /* The local temperature perturbation dT/T */
+        double deltaT = dnu/4;
 
-            /* Determine the density perturbation at this point */
-            double dnu = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double q = hypot3(p->v[0], p->v[1], p->v[2]);
-            double dlnfdlnq = compute_dlnf0_dlnq(p_eV/T_eV, 1e-3);
-            double Psi0 = -0.25 * dnu * dlnfdlnq;
+        /* Apply the perturbation */
+        p->v[0] *= 1 + deltaT;
+        p->v[1] *= 1 + deltaT;
+        p->v[2] *= 1 + deltaT;
 
-            double Psi = Psi0;
+        /* Compute initial phase space density */
+        p->f_i = f_i;
 
-            double base_accept = 1.0 - 1e-2;
-            double p_accept = base_accept * (1 + Psi);
+        /* Compute the magnitude of the initial velocity */
+        p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
 
-            if (p_accept > 1) {
-                printf("ERROR: rejection sampler encountered P(accept) > 1\t [q, Psi, P] = [%f, %e, %e].\n", q, Psi, p_accept);
-                exit(1);
-            }
-
-            /* Draw a uniform random number */
-            double u = sampleUniform(&id);
-
-            /* Do we accept? */
-            if (u < p_accept) {
-                accept = 1;
-            }
-
-            if (i==0)
-            message(rank, "First random momentum = %e eV\n", p_eV);
-
-            /* Compute initial phase space density */
-            p->f_i = f_i;
-
-            /* Compute the magnitude of the initial velocity */
-            p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
-
-        }
     }
-
-    message(rank, "Acceptance probability: %f\n", 1-(double)localParticleNumber/thermal_draws);
 
     message(rank, "Done with pre-initial conditions.\n");
 
