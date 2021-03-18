@@ -397,9 +397,38 @@ int main(int argc, char *argv[]) {
             p->x[0] += p->v[0] * drift * dtau;
             p->x[1] += p->v[1] * drift * dtau;
             p->x[2] += p->v[2] * drift * dtau;
+        }
 
-            /* Obtain acceleration at the new position */
+        /* Find the interpolation index along the time dimension */
+        perturbSplineFindTau(&spline, log_tau_half, &tau_index, &u_tau);
+
+        /* Package the perturbation theory interpolation spline parameters */
+        struct spline_params sp2 = {&spline, index_psi, tau_index, u_tau};
+
+        /* Apply the transfer function (read only fgrf, output into fbox) */
+        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
+
+        /* Fourier transform to real space */
+        c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
+        fft_execute(c2r);
+        fft_normalize_c2r(box, N, BoxLen);
+        fftw_destroy_plan(c2r);
+
+        /* Integrate the particles */
+        #pragma omp parallel for
+        for (int i=0; i<localParticleNumber; i++) {
+            struct particle_ext *p = &genparts[i];
+
+            /* Get the acceleration from the scalar potential psi */
+            double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
+
+            /* Fetch the relativistic correction factors */
+            double q = p->v_i;
+            double epsfac = hypot(q, a * m_eV);
+
+            /* Compute kick factor */
+            double kick = epsfac / c;
 
             /* Execute second kick */
             p->v[0] -= acc[0] * kick * dtau2;
