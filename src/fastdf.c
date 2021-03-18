@@ -353,7 +353,7 @@ int main(int argc, char *argv[]) {
 
         /* The index of the potential transfer function psi */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
-        int index_phi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
+        int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
@@ -426,15 +426,15 @@ int main(int argc, char *argv[]) {
             p->v[1] -= acc[1] * kick * dtau1;
             p->v[2] -= acc[2] * kick * dtau1;
 
+            /* Execute Sachs-Wolfe correction */
+            p->v[0] += p->v[0] * phi_dot_c2 * dtau;
+            p->v[1] += p->v[1] * phi_dot_c2 * dtau;
+            p->v[2] += p->v[2] * phi_dot_c2 * dtau;
+
             /* Execute drift */
             p->x[0] += p->v[0] * drift * dtau;
             p->x[1] += p->v[1] * drift * dtau;
             p->x[2] += p->v[2] * drift * dtau;
-
-            /* Execute redshift */
-            p->v[0] += p->v[0] * phi_dot_c2 * dtau;
-            p->v[1] += p->v[1] * phi_dot_c2 * dtau;
-            p->v[2] += p->v[2] * phi_dot_c2 * dtau;
         }
 
         /* Next, we will compute the potential at the half-step time */
