@@ -249,3 +249,16 @@ double perturbDensityAtLogTau(const struct perturb_spline *spline, double log_ta
                + u_tau * arr[tau_index + 1];
 
 }
+
+double perturbHubbleAtLogTau(const struct perturb_spline *spline, double log_tau) {
+    /* Indices in the tau directions */
+    int tau_index = 0;
+    /* Spacing (0 <= u <= 1) between subsequent indices */
+    double u_tau;
+
+    /* Find the index and spacing */
+    perturbSplineFindTau(spline, log_tau, &tau_index, &u_tau);
+
+    return (1 - u_tau) * spline->ptdat->Hubble_H[tau_index]
+               + u_tau * spline->ptdat->Hubble_H[tau_index + 1];
+}
