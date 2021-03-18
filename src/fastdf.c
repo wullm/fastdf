@@ -422,7 +422,7 @@ int main(int argc, char *argv[]) {
             writeFieldFile(box, N, BoxLen, psi_fname);
         }
 
-        /* Integrate the particles */
+        /* Integrate the particles during the second half-step */
         #pragma omp parallel for
         for (int i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
