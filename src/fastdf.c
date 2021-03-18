@@ -27,32 +27,6 @@
 
 #include "../include/fastdf.h"
 
-/* Fermi-Dirac distribution function */
-double f0(double q) {
-    double ksi = 0; //potential
-    return 1.0/pow(2*M_PI,3)*(1./(exp(q-ksi)+1.) +1./(exp(q+ksi)+1.));
-}
-
-/* Logarithmic derivative of distribution function */
-double compute_dlnf0_dlnq(double q, double h) {
-    double df0_dq = 0, dlnf0_dlnq;
-
-    df0_dq += (1./12.) * f0(q - 2*h);
-    df0_dq -= (8./12.) * f0(q - 1*h);
-    df0_dq += (8./12.) * f0(q + 1*h);
-    df0_dq -= (1./12.) * f0(q + 2*h);
-    df0_dq /= h;
-
-    double f0_eval = f0(q);
-    if (fabs(f0_eval) > 0) {
-        dlnf0_dlnq = q/f0_eval * df0_dq;
-    } else {
-        dlnf0_dlnq = -q;
-    }
-
-    return dlnf0_dlnq;
-}
-
 int main(int argc, char *argv[]) {
     if (argc == 1) {
         printf("No parameter file specified.\n");
@@ -117,6 +91,12 @@ int main(int argc, char *argv[]) {
     const double m_eV = ptpars.M_ncdm_eV[0];
     const double T_nu = ptpars.T_ncdm[0] * ptpars.T_CMB;
     const double T_eV = T_nu * us.kBoltzmann / us.ElectronVolt;
+
+    /* Compute the isentropic ratio and equation of state at a_end */
+    const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
+    const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
+    message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, cosmo.a_end);
+    message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
 
     /* Initialize the interpolation spline for the perturbation data */
     initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
@@ -527,13 +507,23 @@ int main(int argc, char *argv[]) {
 
         /* The indices of the potential transfer function */
         int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
+        int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
         int index_ncdm = findTitle(ptdat.titles, "d_ncdm[0]", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_hdot, tau_index, u_tau};
+        struct spline_params sp2 = {&spline, index_etadot, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
+
+        /* Compute alpha * k^2 = h_dot + 6 * eta_dot */
+        for (int i=0; i<N*N*(N/2+1); i++) {
+            fbox[i] += 6 * fbox2[i];
+        }
+
+        /* Apply the Poisson kernel -1/k^2 */
         fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
 
         /* Fourier transform to real space */
@@ -582,7 +572,7 @@ int main(int argc, char *argv[]) {
         double alpha_rho = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
         /* The equivalent temperature perturbation dT/T */
-        double deltaT = alpha_rho/4;
+        double deltaT = alpha_rho/isen_ncdm;
 
         /* Apply the perturbation */
         p->v[0] *= 1 - deltaT;

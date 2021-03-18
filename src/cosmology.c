@@ -257,3 +257,96 @@ double get_kick_factor(const struct cosmology *cosmo, const double log_a_start,
 
   return int1 - int0;
 }
+
+/* Fermi-Dirac distribution function */
+double f0(double q) {
+    double ksi = 0; //potential
+    return 1.0/pow(2*M_PI,3)*(1./(exp(q-ksi)+1.) +1./(exp(q+ksi)+1.));
+}
+
+double ncdm_density_integrand(double p, void *params) {
+    double *pars = (double *) params;
+    double a = pars[0];
+    double m = pars[1];
+    double T = pars[2];
+
+    double eps = hypot(p, a*m);
+    double f = f0(p/T);
+    double p2 = p * p;
+
+    return p2 * eps * f;
+}
+
+double ncdm_pressure_integrand(double p, void *params) {
+    double *pars = (double *) params;
+    double a = pars[0];
+    double m = pars[1];
+    double T = pars[2];
+
+    double eps = hypot(p, a*m);
+    double f = f0(p/T);
+    double p2 = p * p;
+
+    return p2 * p2 / (3 * eps) * f;
+}
+
+double ncdm_background_density(double a, double m, double T) {
+    /* Initalise the GSL workspace */
+    gsl_integration_workspace *space =
+      gsl_integration_workspace_alloc(workspace_size);
+
+    double result, abserr;
+
+    /* Compute the drift factor table */
+    double pars[3] = {a, m, T};
+    gsl_function F = {&ncdm_density_integrand, pars};
+    gsl_integration_qag(&F, 0, T * 100, 0,
+                        1.0e-10, workspace_size, GSL_INTEG_GAUSS61, space,
+                        &result, &abserr);
+
+    /* Free the GSL workspace */
+    gsl_integration_workspace_free(space);
+
+    return result;
+}
+
+double ncdm_background_pressure(double a, double m, double T) {
+    /* Initalise the GSL workspace */
+    gsl_integration_workspace *space =
+      gsl_integration_workspace_alloc(workspace_size);
+
+    double result, abserr;
+
+    /* Compute the drift factor table */
+    double pars[3] = {a, m, T};
+    gsl_function F = {&ncdm_pressure_integrand, pars};
+    gsl_integration_qag(&F, 0, T * 100, 0,
+                        1.0e-10, workspace_size, GSL_INTEG_GAUSS61, space,
+                        &result, &abserr);
+
+    /* Free the GSL workspace */
+    gsl_integration_workspace_free(space);
+
+    return result;
+}
+
+double ncdm_isentropic_ratio(double a, double m, double T) {
+    double T1 = T * (1 - 0.001);
+    double T2 = T * (1 + 0.001);
+    double rho1 = ncdm_background_density(a, m, T1);
+    double rho2 = ncdm_background_density(a, m, T2);
+
+    double rho = ncdm_background_density(a, m, T);
+
+    double drho = rho2 - rho1;
+    double dT = T2 - T1;
+
+    return (drho / rho) * (T / dT);
+}
+
+double ncdm_equation_of_state(double a, double m, double T) {
+    double rho = ncdm_background_density(a, m, T);
+    double P = ncdm_background_pressure(a, m, T);
+
+    return P / rho;
+}

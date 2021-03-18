@@ -56,4 +56,7 @@ double get_drift_factor(const struct cosmology *cosmo, const double log_a_start,
 double get_kick_factor(const struct cosmology *cosmo, const double log_a_start,
                        const double log_a_end);
 
+double ncdm_isentropic_ratio(double a, double m, double T);
+double ncdm_equation_of_state(double a, double m, double T);
+
 #endif
