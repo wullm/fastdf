@@ -92,12 +92,6 @@ int main(int argc, char *argv[]) {
     const double T_nu = ptpars.T_ncdm[0] * ptpars.T_CMB;
     const double T_eV = T_nu * us.kBoltzmann / us.ElectronVolt;
 
-    /* Compute the isentropic ratio and equation of state at a_end */
-    const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
-    const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
-    message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, cosmo.a_end);
-    message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
-
     /* Initialize the interpolation spline for the perturbation data */
     initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
 
@@ -191,7 +185,9 @@ int main(int argc, char *argv[]) {
     double z_begin = 1./cosmo.a_begin - 1;
     double log_tau_begin = perturbLogTauAtRedshift(&spline, z_begin);
 
-    header(rank, "Generating pre-initial grids");
+
+    header(rank, "Generating pre-initial conditions");
+    message(rank, "Generating pre-initial grids.\n");
     {
 
         /* Find the interpolation index along the time dimension */
@@ -230,7 +226,6 @@ int main(int argc, char *argv[]) {
 
     }
 
-    header(rank, "Generating pre-initial conditions");
     message(rank, "ID of first particle = %lld\n", firstID);
     message(rank, "T_nu = %e eV\n", T_eV);
 
@@ -490,8 +485,14 @@ int main(int argc, char *argv[]) {
     }
 
     header(rank, "Generating gauge transformation grid");
-    {
 
+    /* Compute the isentropic ratio and equation of state at a_end */
+    const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
+    const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
+    message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, cosmo.a_end);
+    message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
+
+    {
         /* Final time at which to execute the gauge transformation */
         double z_end = 1./cosmo.a_end - 1;
         double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
@@ -576,10 +577,12 @@ int main(int argc, char *argv[]) {
 
         /* Add the N-body gauge shift to the overall gauge shift */
         for (int i=0; i<N*N*N; i++) {
-            box[i] += box2[i];
+            box[i] -= box2[i];
         }
 
     }
+
+    message(rank, "Applying gauge transformation to the particles.\n");
 
     /* Perform the gauge transformation */
     #pragma omp parallel for
