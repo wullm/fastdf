@@ -508,15 +508,18 @@ int main(int argc, char *argv[]) {
         /* The indices of the potential transfer function */
         int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
         int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
+        int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
         int index_ncdm = findTitle(ptdat.titles, "d_ncdm[0]", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_hdot, tau_index, u_tau};
         struct spline_params sp2 = {&spline, index_etadot, tau_index, u_tau};
+        struct spline_params sp3 = {&spline, index_Nbshift, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
         fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
+        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
 
         /* Compute alpha * k^2 = h_dot + 6 * eta_dot */
         for (int i=0; i<N*N*(N/2+1); i++) {
@@ -531,6 +534,11 @@ int main(int argc, char *argv[]) {
         fft_execute(c2r);
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
+
+        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
+        fft_execute(c2r2);
+        fft_normalize_c2r(box2, N, BoxLen);
+        fftw_destroy_plan(c2r2);
 
         /* Compute the conformatl time derivative of the background density */
         double Omega_nu1 = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
@@ -553,12 +561,22 @@ int main(int argc, char *argv[]) {
         /* Multiply by the appropriate factor */
         for (int i=0; i<N*N*N; i++) {
             box[i] *= -0.5 * rho_dot_rho / (c * c * c * c);
+            box2[i] *= 1 + w_ncdm;
         }
 
         if (rank == 0 && pars.OutputFields) {
             char alpha_fname[50];
             sprintf(alpha_fname, "%s/gauge_alpha.hdf5", pars.OutputDirectory);
             writeFieldFile(box, N, BoxLen, alpha_fname);
+
+            char Nbshift_fname[50];
+            sprintf(Nbshift_fname, "%s/gauge_Nbshift.hdf5", pars.OutputDirectory);
+            writeFieldFile(box2, N, BoxLen, Nbshift_fname);
+        }
+
+        /* Add the N-body gauge shift to the overall gauge shift */
+        for (int i=0; i<N*N*N; i++) {
+            box[i] += box2[i];
         }
 
     }
@@ -568,11 +586,11 @@ int main(int argc, char *argv[]) {
     for (int i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
-        /* Determine the gauge transformation value at this point */
-        double alpha_rho = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+        /* Determine the gauge shift at this point */
+        double delta = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
         /* The equivalent temperature perturbation dT/T */
-        double deltaT = alpha_rho/isen_ncdm;
+        double deltaT = delta/isen_ncdm;
 
         /* Apply the perturbation */
         p->v[0] *= 1 - deltaT;
