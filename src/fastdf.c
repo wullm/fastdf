@@ -399,6 +399,8 @@ int main(int argc, char *argv[]) {
             p->x[2] += p->v[2] * drift * dtau;
         }
 
+        /* Next, we will compute the potential at the half-step time */
+
         /* Find the interpolation index along the time dimension */
         perturbSplineFindTau(&spline, log_tau_half, &tau_index, &u_tau);
 
@@ -414,6 +416,12 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
+        if (rank == 0 && pars.OutputFields) {
+            char psi_fname[50];
+            sprintf(psi_fname, "%s/psi_%db.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box, N, BoxLen, psi_fname);
+        }
+
         /* Integrate the particles */
         #pragma omp parallel for
         for (int i=0; i<localParticleNumber; i++) {
@@ -425,7 +433,7 @@ int main(int argc, char *argv[]) {
 
             /* Fetch the relativistic correction factors */
             double q = p->v_i;
-            double epsfac = hypot(q, a * m_eV);
+            double epsfac = hypot(q, a_half * m_eV);
 
             /* Compute kick factor */
             double kick = epsfac / c;
