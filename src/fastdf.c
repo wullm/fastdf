@@ -381,26 +381,30 @@ int main(int argc, char *argv[]) {
             /* Fetch the relativistic correction factors */
             double q = p->v_i;
             double epsfac = hypot(q, a * m_eV);
-            double epsfac_inv = 1./epsfac;
-            double drift_factor = 1.0 + (3 - q*q * epsfac_inv * epsfac_inv) * psi_c2;
+            double epsfac_inv = 1. / epsfac;
+            double drift_factor = (3 - q * q * epsfac_inv * epsfac_inv) * psi_c2;
+
+            /* Compute kick and drift factors */
+            double kick = epsfac / c;
+            double drift = epsfac_inv * (1.0 + drift_factor) * c;
 
             /* Execute first kick */
-            p->v[0] += - epsfac * acc[0] / c * dtau1;
-            p->v[1] += - epsfac * acc[1] / c * dtau1;
-            p->v[2] += - epsfac * acc[2] / c * dtau1;
+            p->v[0] -= acc[0] * kick * dtau1;
+            p->v[1] -= acc[1] * kick * dtau1;
+            p->v[2] -= acc[2] * kick * dtau1;
 
             /* Execute drift */
-            p->x[0] += p->v[0] * dtau * epsfac_inv * c * drift_factor;
-            p->x[1] += p->v[1] * dtau * epsfac_inv * c * drift_factor;
-            p->x[2] += p->v[2] * dtau * epsfac_inv * c * drift_factor;
+            p->x[0] += p->v[0] * drift * dtau;
+            p->x[1] += p->v[1] * drift * dtau;
+            p->x[2] += p->v[2] * drift * dtau;
 
             /* Obtain acceleration at the new position */
             accelCIC(box, N, BoxLen, p->x, acc);
 
             /* Execute second kick */
-            p->v[0] += - epsfac * acc[0] / c * dtau2;
-            p->v[1] += - epsfac * acc[1] / c * dtau2;
-            p->v[2] += - epsfac * acc[2] / c * dtau2;
+            p->v[0] -= acc[0] * kick * dtau2;
+            p->v[1] -= acc[1] * kick * dtau2;
+            p->v[2] -= acc[2] * kick * dtau2;
         }
 
         /* Step forward */
