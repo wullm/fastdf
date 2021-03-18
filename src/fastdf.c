@@ -206,11 +206,9 @@ int main(int argc, char *argv[]) {
 
     double z_begin = 1./cosmo.a_begin - 1;
     double log_tau_begin = perturbLogTauAtRedshift(&spline, z_begin);
-    double tau_begin = exp(log_tau_begin);
 
     header(rank, "Generating pre-initial grids");
     {
-
 
         /* Find the interpolation index along the time dimension */
         int tau_index; //greatest lower bound bin index
@@ -471,10 +469,86 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /* Free memory */
-    free(box);
-    free(fgrf);
-    free(fbox);
+    header(rank, "Generating gauge transformation grid");
+    {
+
+        /* Final time at which to execute the gauge transformation */
+        double z_end = 1./cosmo.a_end - 1;
+        double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
+
+        double a2 = cosmo.a_end * 1.001;
+        double z2 =  1./a2 - 1;
+        double log_tau2 = perturbLogTauAtRedshift(&spline, z2);
+
+        /* Find the interpolation index along the time dimension */
+        int tau_index; //greatest lower bound bin index
+        double u_tau; //spacing between subsequent bins
+        perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
+
+        /* The indices of the potential transfer function */
+        int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
+        int index_ncdm = findTitle(ptdat.titles, "d_ncdm[0]", ptdat.n_functions);
+
+        /* Package the perturbation theory interpolation spline parameters */
+        struct spline_params sp = {&spline, index_hdot, tau_index, u_tau};
+
+        /* Apply the transfer function (read only fgrf, output into fbox) */
+        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
+        fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
+
+        /* Fourier transform to real space */
+        fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
+        fft_execute(c2r);
+        fft_normalize_c2r(box, N, BoxLen);
+        fftw_destroy_plan(c2r);
+
+        /* Compute the conformatl time derivative of the background density */
+        double Omega_nu1 = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
+        double Omega_nu2 = perturbDensityAtLogTau(&spline, log_tau2, index_ncdm);
+
+        double H1 = perturbHubbleAtLogTau(&spline, log_tau_end);
+        double H2 = perturbHubbleAtLogTau(&spline, log_tau2);
+
+        double H_0 = cosmo.H_0;
+        double rho_crit1 = cosmo.rho_crit * (H1 * H1) / (H_0 * H_0);
+        double rho_crit2 = cosmo.rho_crit * (H2 * H2) / (H_0 * H_0);
+
+        double rho_nu1 = Omega_nu1 * rho_crit1;
+        double rho_nu2 = Omega_nu2 * rho_crit2;
+
+        double dtau = exp(log_tau2) - exp(log_tau_end);
+        double rho_dot = (rho_nu2 - rho_nu1) / dtau;
+        double rho_dot_rho = rho_dot / rho_nu1;
+
+        /* Multiply by the appropriate factor */
+        for (int i=0; i<N*N*N; i++) {
+            box[i] *= -0.5 * rho_dot_rho / (c * c * c * c);
+        }
+
+        if (rank == 0 && pars.OutputFields) {
+            char alpha_fname[50];
+            sprintf(alpha_fname, "%s/gauge_alpha.hdf5", pars.OutputDirectory);
+            writeFieldFile(box, N, BoxLen, alpha_fname);
+        }
+
+    }
+
+    /* Perform the gauge transformation */
+    #pragma omp parallel for
+    for (int i=0; i<localParticleNumber; i++) {
+        struct particle_ext *p = &genparts[i];
+
+        /* Determine the gauge transformation value at this point */
+        double alpha_rho = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+
+        /* The equivalent temperature perturbation dT/T */
+        double deltaT = alpha_rho/4;
+
+        /* Apply the perturbation */
+        p->v[0] *= 1 - deltaT;
+        p->v[1] *= 1 - deltaT;
+        p->v[2] *= 1 - deltaT;
+    }
 
     /* Final operations before writing the particles to disk */
     #pragma omp parallel for
@@ -499,6 +573,11 @@ int main(int argc, char *argv[]) {
         p->v[1] /= a_end;
         p->v[2] /= a_end;
     }
+
+    /* Free memory */
+    free(box);
+    free(fgrf);
+    free(fbox);
 
     header(rank, "Prepare output");
 
