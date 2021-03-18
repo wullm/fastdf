@@ -147,15 +147,6 @@ int main(int argc, char *argv[]) {
     fft_normalize_r2c(fbox, N, BoxLen);
     fftw_destroy_plan(r2c);
 
-    /* Allocate another pair of boxes for the N-body gauge terms */
-    fftw_complex *fbox_Nb1 = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_complex *fbox_Nb2 = malloc(N*N*N*sizeof(fftw_complex));
-    double *box_chi = malloc(N*N*N*sizeof(double));
-    double *box_extra1 = malloc(N*N*N*sizeof(double));
-
-
-    fftw_complex *fbox_extra1 = malloc(N*N*N*sizeof(fftw_complex));
-
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
 
@@ -323,49 +314,44 @@ int main(int argc, char *argv[]) {
 
     /* The main loop */
     for (int ITER = 0; ITER < MAX_ITER; ITER++) {
+
+        /* Determine the next scale factor */
+        double a_next;
+        if (ITER < MAX_ITER - 1) {
+            a_next = a * a_factor;
+        } else {
+            a_next = a_end;
+        }
+
         /* Compute the current redshift and log conformal time */
         double z = 1./a - 1;
         double log_tau = perturbLogTauAtRedshift(&spline, z);
 
-        /* Determine the next scale factor */
-        double a_next, a_half;
-        if (ITER < MAX_ITER - 1) {
-            a_next = a * a_factor;
-            a_half = sqrt(a_next * a);
-        } else {
-            a_next = a_end;
-            a_half = sqrt(a_next * a);
-        }
+        /* Determine the half-step scale factor */
+        double a_half = sqrt(a_next * a);
 
-        /* Retrieve physical constants */
-        const double potential_factor = 1.0 / us.GravityG;
-        const double c = us.SpeedOfLight;
+        /* Find the next and half-step conformal times */
+        double z_next = 1./a_next - 1;
+        double z_half = 1./a_half - 1;
+        double log_tau_next = perturbLogTauAtRedshift(&spline, z_next);
+        double log_tau_half = perturbLogTauAtRedshift(&spline, z_half);
+        double dtau1 = exp(log_tau_half) - exp(log_tau);
+        double dtau2 = exp(log_tau_next) - exp(log_tau_half);
+        double dtau = dtau1 + dtau2;
 
         /* Find the interpolation index along the time dimension */
         int tau_index; //greatest lower bound bin index
         double u_tau; //spacing between subsequent bins
         perturbSplineFindTau(&spline, log_tau, &tau_index, &u_tau);
 
-        /* Find the interpolation index along the time dimension */
-        double z_next = 1./a_next - 1;
-        double log_tau_next = perturbLogTauAtRedshift(&spline, z_next);
-        double dtau = exp(log_tau_next) - exp(log_tau);
-
-        /* The indices of the potential transfer function */
-        int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
+        /* The index of the potential transfer function psi */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
-        int index_H_p = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
-        int index_H_pp = findTitle(ptdat.titles, "H_T_Nb_prime_prime", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp = {&spline, index_phi, tau_index, u_tau};
-        struct spline_params sp2 = {&spline, index_psi, tau_index, u_tau};
-        struct spline_params sp_Nb1 = {&spline, index_H_p, tau_index, u_tau};
-        struct spline_params sp_Nb2 = {&spline, index_H_pp, tau_index, u_tau};
+        struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
-        fft_apply_kernel(fbox_Nb1, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -373,78 +359,48 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
-        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox_Nb1, box_chi, FFTW_ESTIMATE);
-        fft_execute(c2r2);
-        fft_normalize_c2r(box_chi, N, BoxLen);
-        fftw_destroy_plan(c2r2);
-
-        /* Multiply by the potential factor */
-        for (int i=0; i<N*N*N; i++) {
-            box[i] *= potential_factor;
-            box_chi[i] *= potential_factor;
-            // box_chi[i] = box[i] - box_chi[i];
-        }
-
         if (rank == 0 && pars.OutputFields) {
-            char pot_fname[50];
-            sprintf(pot_fname, "%s/phi_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box, N, BoxLen, pot_fname);
-
-            char chi_fname[50];
-            sprintf(chi_fname, "%s/chi_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box_chi, N, BoxLen, chi_fname);
+            char psi_fname[50];
+            sprintf(psi_fname, "%s/psi_%d.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box, N, BoxLen, psi_fname);
         }
-
-        /* Fetch the cosmological kick and drift factors */
-        double kick_factor = get_kick_factor(&cosmo, log(a), log(a_next));
-        double drift_factor = get_drift_factor(&cosmo, log(a), log(a_next));
 
         /* Integrate the particles */
         #pragma omp parallel for
         for (int i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
-            /* Get the accelerations by computing the gradient of phi */
+            /* Get the acceleration from the scalar potential psi */
             double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
 
-            /* Get the acceleration from the anistropic stress chi */
-            double acc_chi[3];
-            accelCIC(box_chi, N, BoxLen, p->x, acc_chi);
-
-            /* Also fetch the values of the potential and stress */
-            double phi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double chi = gridCIC(box_chi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_c2 = phi / (c * c * potential_factor);
-            double chi_c2 = chi / (c * c * potential_factor);
+            /* Also fetch the value of the potential at the particle position */
+            double psi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double psi_c2 = psi / (c * c);
 
             /* Fetch the relativistic correction factors */
-            double q = hypot3(p->v[0], p->v[1], p->v[2]);
-            double ui = p->v_i;
-            double ui2 = ui * ui;
+            double q = p->v_i;
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1./epsfac;
-            double relat_kick_correction = q*q * epsfac_inv;
-            double relat_drift_correction = epsfac_inv;
-            double relat_stress_correction = epsfac / relat_kick_correction;
-            double relat_extra_correction = ui2 * epsfac_inv * epsfac_inv;
+            double drift_factor = 1.0 + (3 - q*q * epsfac_inv * epsfac_inv) * psi_c2;
 
-            /* Compute the overall kick and drift step sizes */
-            double kick = dtau * us.GravityG;
-            double drift = dtau * relat_drift_correction;
-
-            /* Execute kick */
-            p->v[0] += (-acc[0] * relat_kick_correction - epsfac * acc_chi[0]) * kick / c;
-            p->v[1] += (-acc[1] * relat_kick_correction - epsfac * acc_chi[1]) * kick / c;
-            p->v[2] += (-acc[2] * relat_kick_correction - epsfac * acc_chi[2]) * kick / c;
-            // p->v[0] += (phi_dot / c * q - epsfac * acc_chi[0]) * kick / c;
-            // p->v[1] += (phi_dot / c * q - epsfac * acc_chi[1]) * kick / c;
-            // p->v[2] += (phi_dot / c * q - epsfac * acc_chi[2]) * kick / c;
+            /* Execute first kick */
+            p->v[0] += - epsfac * acc[0] / c * dtau1;
+            p->v[1] += - epsfac * acc[1] / c * dtau1;
+            p->v[2] += - epsfac * acc[2] / c * dtau1;
 
             /* Execute drift */
-            p->x[0] += p->v[0] * drift * c * (1 + (2 - q*q * epsfac_inv * epsfac_inv) * phi_c2 + chi_c2);
-            p->x[1] += p->v[1] * drift * c * (1 + (2 - q*q * epsfac_inv * epsfac_inv) * phi_c2 + chi_c2);
-            p->x[2] += p->v[2] * drift * c * (1 + (2 - q*q * epsfac_inv * epsfac_inv) * phi_c2 + chi_c2);
+            p->x[0] += p->v[0] * dtau * epsfac_inv * c * drift_factor;
+            p->x[1] += p->v[1] * dtau * epsfac_inv * c * drift_factor;
+            p->x[2] += p->v[2] * dtau * epsfac_inv * c * drift_factor;
+
+            /* Obtain acceleration at the new position */
+            accelCIC(box, N, BoxLen, p->x, acc);
+
+            /* Execute second kick */
+            p->v[0] += - epsfac * acc[0] / c * dtau2;
+            p->v[1] += - epsfac * acc[1] / c * dtau2;
+            p->v[2] += - epsfac * acc[2] / c * dtau2;
         }
 
         /* Step forward */
@@ -478,9 +434,6 @@ int main(int argc, char *argv[]) {
     free(box);
     free(fgrf);
     free(fbox);
-    free(fbox_Nb1);
-    free(fbox_Nb2);
-    free(box_chi);
 
     /* Final operations before writing the particles to disk */
     #pragma omp parallel for
