@@ -333,10 +333,17 @@ int main(int argc, char *argv[]) {
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
         struct spline_params sp2 = {&spline, index_phi, tau_index, u_tau};
+        struct spline_params sp3 = {&spline, index_phi, tau_index2, u_tau2};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
         fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
+        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
+
+        /* Compute the difference */
+        for (int i=0; i<N*N*(N/2+1); i++) {
+            fbox3[i] -= fbox2[i];
+        }
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -344,10 +351,14 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
-        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
+        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
         fft_execute(c2r2);
         fft_normalize_c2r(box2, N, BoxLen);
         fftw_destroy_plan(c2r2);
+
+        for (int i=0; i<N*N*N; i++) {
+            box2[i] /= dtau;
+        }
 
         if (rank == 0 && pars.OutputFields) {
             char psi_fname[50];
@@ -355,7 +366,7 @@ int main(int argc, char *argv[]) {
             writeFieldFile(box, N, BoxLen, psi_fname);
 
             char phidot_fname[50];
-            sprintf(phidot_fname, "%s/phi_%d.hdf5", pars.OutputDirectory, ITER);
+            sprintf(phidot_fname, "%s/dotphi_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box2, N, BoxLen, phidot_fname);
         }
 
@@ -367,10 +378,6 @@ int main(int argc, char *argv[]) {
             /* Get the acceleration from the scalar potential psi */
             double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
-
-            /* Get the acceleration from the scalar potential psi */
-            double acc_phi[3];
-            accelCIC(box2, N, BoxLen, p->x, acc_phi);
 
             /* Also fetch the value of the potential at the particle position */
             double psi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
@@ -390,19 +397,64 @@ int main(int argc, char *argv[]) {
             double drift = epsfac_inv * (1.0 + drift_factor) * c;
 
             /* Execute first kick */
-            p->v[0] -= acc[0] * kick * dtau + acc_phi[0] * kick * (q * q * epsfac_inv * epsfac_inv) * dtau;
-            p->v[1] -= acc[1] * kick * dtau + acc_phi[1] * kick * (q * q * epsfac_inv * epsfac_inv) * dtau;
-            p->v[2] -= acc[2] * kick * dtau + acc_phi[2] * kick * (q * q * epsfac_inv * epsfac_inv) * dtau;
+            p->v[0] -= acc[0] * kick * dtau1;
+            p->v[1] -= acc[1] * kick * dtau1;
+            p->v[2] -= acc[2] * kick * dtau1;
 
-            /* Extra terms */
-            p->v[0] += p->v[0] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac;
-            p->v[1] += p->v[1] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac;
-            p->v[2] += p->v[2] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac;
+            /* Execute Sachs-Wolfe correction */
+            p->v[0] += p->v[0] * phi_dot_c2 * dtau;
+            p->v[1] += p->v[1] * phi_dot_c2 * dtau;
+            p->v[2] += p->v[2] * phi_dot_c2 * dtau;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift * dtau;
             p->x[1] += p->v[1] * drift * dtau;
             p->x[2] += p->v[2] * drift * dtau;
+        }
+
+        /* Next, we will compute the potential at the half-step time */
+
+        /* Find the interpolation index along the time dimension */
+        perturbSplineFindTau(&spline, log_tau_half, &tau_index, &u_tau);
+
+        /* Package the perturbation theory interpolation spline parameters */
+        struct spline_params sp4 = {&spline, index_psi, tau_index, u_tau};
+
+        /* Apply the transfer function (read only fgrf, output into fbox) */
+        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
+
+        /* Fourier transform to real space */
+        c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
+        fft_execute(c2r);
+        fft_normalize_c2r(box, N, BoxLen);
+        fftw_destroy_plan(c2r);
+
+        if (rank == 0 && pars.OutputFields) {
+            char psi_fname[50];
+            sprintf(psi_fname, "%s/psi_%db.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box, N, BoxLen, psi_fname);
+        }
+
+        /* Integrate the particles during the second half-step */
+        #pragma omp parallel for
+        for (int i=0; i<localParticleNumber; i++) {
+            struct particle_ext *p = &genparts[i];
+
+            /* Get the acceleration from the scalar potential psi */
+            double acc[3];
+            accelCIC(box, N, BoxLen, p->x, acc);
+
+            /* Fetch the relativistic correction factors */
+            double q = p->v_i;
+            double epsfac = hypot(q, a_half * m_eV);
+
+            /* Compute kick factor */
+            double kick = epsfac / c;
+
+            /* Execute second kick */
+            p->v[0] -= acc[0] * kick * dtau2;
+            p->v[1] -= acc[1] * kick * dtau2;
+            p->v[2] -= acc[2] * kick * dtau2;
         }
 
         /* Step forward */
