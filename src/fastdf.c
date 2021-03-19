@@ -323,9 +323,14 @@ int main(int argc, char *argv[]) {
         perturbSplineFindTau(&spline, log_tau, &tau_index, &u_tau);
 
         /* Find the interpolation index along the time dimension */
-        int tau_index2; //greatest lower bound bin index
-        double u_tau2; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_half, &tau_index2, &u_tau2);
+        int tau_index_half; //greatest lower bound bin index
+        double u_half; //spacing between subsequent bins
+        perturbSplineFindTau(&spline, log_tau_half, &tau_index_half, &u_half);
+
+        /* Find the interpolation index along the time dimension */
+        int tau_index_next; //greatest lower bound bin index
+        double u_next; //spacing between subsequent bins
+        perturbSplineFindTau(&spline, log_tau_next, &tau_index_next, &u_next);
 
         /* The index of the potential transfer function psi */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
@@ -334,17 +339,12 @@ int main(int argc, char *argv[]) {
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
         struct spline_params sp2 = {&spline, index_phi, tau_index, u_tau};
-        struct spline_params sp3 = {&spline, index_phi, tau_index2, u_tau2};
+        struct spline_params sp3 = {&spline, index_phi, tau_index_half, u_half};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
         fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
         fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
-
-        // /* Compute the difference */
-        // for (int i=0; i<N*N*(N/2+1); i++) {
-        //     fbox3[i] -= fbox2[i];
-        // }
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -352,7 +352,7 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
-        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
+        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
         fft_execute(c2r2);
         fft_normalize_c2r(box2, N, BoxLen);
         fftw_destroy_plan(c2r2);
@@ -373,7 +373,7 @@ int main(int argc, char *argv[]) {
 
             char phi_fname2[50];
             sprintf(phi_fname2, "%s/phi_%db.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box2, N, BoxLen, phi_fname2);
+            writeFieldFile(box3, N, BoxLen, phi_fname2);
         }
 
         /* Integrate the particles */
@@ -440,12 +440,9 @@ int main(int argc, char *argv[]) {
 
         /* Next, we will compute the potential at the half-step time */
 
-        /* Find the interpolation index along the time dimension */
-        perturbSplineFindTau(&spline, log_tau_next, &tau_index, &u_tau);
-
         /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp4 = {&spline, index_psi, tau_index2, u_tau2};
-        struct spline_params sp5 = {&spline, index_phi, tau_index, u_tau};
+        struct spline_params sp4 = {&spline, index_psi, tau_index_half, u_half};
+        struct spline_params sp5 = {&spline, index_phi, tau_index_next, u_next};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
@@ -469,7 +466,7 @@ int main(int argc, char *argv[]) {
 
             char phi_fname[50];
             sprintf(phi_fname, "%s/phi_%dc.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box, N, BoxLen, phi_fname);
+            writeFieldFile(box2, N, BoxLen, phi_fname);
         }
 
         /* Integrate the particles during the second half-step */
