@@ -619,6 +619,11 @@ int main(int argc, char *argv[]) {
         double w = (p->f_i - f)/p->f_i;
         p->mass = eps * w;
 
+        /* Convert momenta to velocities */
+        p->v[0] *= c / m_eV;
+        p->v[1] *= c / m_eV;
+        p->v[2] *= c / m_eV;
+
         /* Convert to peculiar velocities */
         p->v[0] /= a_end;
         p->v[1] /= a_end;
