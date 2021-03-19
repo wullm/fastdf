@@ -395,9 +395,9 @@ int main(int argc, char *argv[]) {
             p->v[2] -= acc[2] * kick * dtau + acc_phi[2] * kick * (q * q * epsfac_inv * epsfac_inv) * dtau;
 
             /* Extra terms */
-            p->v[0] += p->v[0] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac / c;
-            p->v[1] += p->v[1] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac / c;
-            p->v[2] += p->v[2] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac / c;
+            p->v[0] += p->v[0] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac;
+            p->v[1] += p->v[1] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac;
+            p->v[2] += p->v[2] * (acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] + acc_phi[2] * p->v[2]) * dtau * 2. / epsfac;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift * dtau;
