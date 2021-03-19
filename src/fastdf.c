@@ -397,6 +397,7 @@ int main(int argc, char *argv[]) {
             double phi2 = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
             double delta_phi = phi2 - phi1;
             double phi_dot_c2 = delta_phi / dtau1 / (c * c);
+            double phi1_c2 = phi1 / (c * c);
 
             /* Fetch the relativistic correction factors */
             double q = p->v_i;
@@ -404,7 +405,7 @@ int main(int argc, char *argv[]) {
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1. / epsfac;
             double eps_inv2 = epsfac_inv * epsfac_inv;
-            double drift_factor = (3 - q2 * eps_inv2) * psi_c2;
+            double drift_factor = psi_c2 + phi1_c2;
 
             /* Compute kick and drift factors */
             double kick = epsfac / c;
