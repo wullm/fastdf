@@ -117,9 +117,6 @@ static void init_neutrino_particle(uint64_t seed, double m_eV, double *v,
                                    double *x, double *w, double boxlen,
                                    const struct units *us, double T_eV) {
 
-    /* Retrieve physical constants */
-    const double c = us->SpeedOfLight;
-
     /* A unique uniform random number for this neutrino */
     const double z = sampleUniform(&seed);
     /* The corresponding initial Fermi-Dirac momentum */
