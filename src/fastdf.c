@@ -124,6 +124,7 @@ int main(int argc, char *argv[]) {
     fftw_complex *fbox2 = malloc(N*N*N*sizeof(fftw_complex));
     fftw_complex *fbox3 = malloc(N*N*N*sizeof(fftw_complex));
     double *box2 = malloc(N*N*N*sizeof(double));
+    double *box3 = malloc(N*N*N*sizeof(double));
 
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
@@ -324,7 +325,7 @@ int main(int argc, char *argv[]) {
         /* Find the interpolation index along the time dimension */
         int tau_index2; //greatest lower bound bin index
         double u_tau2; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_next, &tau_index2, &u_tau2);
+        perturbSplineFindTau(&spline, log_tau_half, &tau_index2, &u_tau2);
 
         /* The index of the potential transfer function psi */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
@@ -340,10 +341,10 @@ int main(int argc, char *argv[]) {
         fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
         fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
 
-        /* Compute the difference */
-        for (int i=0; i<N*N*(N/2+1); i++) {
-            fbox3[i] -= fbox2[i];
-        }
+        // /* Compute the difference */
+        // for (int i=0; i<N*N*(N/2+1); i++) {
+        //     fbox3[i] -= fbox2[i];
+        // }
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -356,18 +357,23 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box2, N, BoxLen);
         fftw_destroy_plan(c2r2);
 
-        for (int i=0; i<N*N*N; i++) {
-            box2[i] /= dtau;
-        }
+        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box3, FFTW_ESTIMATE);
+        fft_execute(c2r3);
+        fft_normalize_c2r(box3, N, BoxLen);
+        fftw_destroy_plan(c2r3);
 
         if (rank == 0 && pars.OutputFields) {
             char psi_fname[50];
             sprintf(psi_fname, "%s/psi_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box, N, BoxLen, psi_fname);
 
-            char phidot_fname[50];
-            sprintf(phidot_fname, "%s/dotphi_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box2, N, BoxLen, phidot_fname);
+            char phi_fname[50];
+            sprintf(phi_fname, "%s/phi_%d.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box2, N, BoxLen, phi_fname);
+
+            char phi_fname2[50];
+            sprintf(phi_fname2, "%s/phi_%db.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box2, N, BoxLen, phi_fname2);
         }
 
         /* Integrate the particles */
@@ -379,18 +385,26 @@ int main(int argc, char *argv[]) {
             double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
 
+            /* Get the acceleration from the scalar potential phi */
+            double acc_phi[3];
+            accelCIC(box2, N, BoxLen, p->x, acc_phi);
+
             /* Also fetch the value of the potential at the particle position */
             double psi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
             double psi_c2 = psi / (c * c);
 
-            double phi_dot = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_dot_c2 = phi_dot / (c * c);
+            double phi1 = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi2 = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double delta_phi = phi2 - phi1;
+            double phi_dot_c2 = delta_phi / dtau1 / (c * c);
 
             /* Fetch the relativistic correction factors */
             double q = p->v_i;
+            double q2 = q * q;
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1. / epsfac;
-            double drift_factor = (3 - q * q * epsfac_inv * epsfac_inv) * psi_c2;
+            double eps_inv2 = epsfac_inv * epsfac_inv;
+            double drift_factor = (3 - q2 * eps_inv2) * psi_c2;
 
             /* Compute kick and drift factors */
             double kick = epsfac / c;
@@ -401,10 +415,22 @@ int main(int argc, char *argv[]) {
             p->v[1] -= acc[1] * kick * dtau1;
             p->v[2] -= acc[2] * kick * dtau1;
 
-            /* Execute Sachs-Wolfe correction */
-            p->v[0] += p->v[0] * phi_dot_c2 * dtau;
-            p->v[1] += p->v[1] * phi_dot_c2 * dtau;
-            p->v[2] += p->v[2] * phi_dot_c2 * dtau;
+            /* Add anti-symmetric terms */
+            p->v[0] -= acc_phi[0] * kick * dtau1 * q2 * eps_inv2;
+            p->v[1] -= acc_phi[1] * kick * dtau1 * q2 * eps_inv2;
+            p->v[2] -= acc_phi[2] * kick * dtau1 * q2 * eps_inv2;
+
+            double sum_term = acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] +
+                              acc_phi[2] * p->v[2];
+
+            p->v[0] += p->v[0] * sum_term * kick * dtau1 * eps_inv2;
+            p->v[1] += p->v[1] * sum_term * kick * dtau1 * eps_inv2;
+            p->v[2] += p->v[2] * sum_term * kick * dtau1 * eps_inv2;
+
+            /* Add contribution from evolving potential */
+            p->v[0] += p->v[0] * phi_dot_c2 * dtau1;
+            p->v[1] += p->v[1] * phi_dot_c2 * dtau1;
+            p->v[2] += p->v[2] * phi_dot_c2 * dtau1;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift * dtau;
@@ -415,13 +441,15 @@ int main(int argc, char *argv[]) {
         /* Next, we will compute the potential at the half-step time */
 
         /* Find the interpolation index along the time dimension */
-        perturbSplineFindTau(&spline, log_tau_half, &tau_index, &u_tau);
+        perturbSplineFindTau(&spline, log_tau_next, &tau_index, &u_tau);
 
         /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp4 = {&spline, index_psi, tau_index, u_tau};
+        struct spline_params sp4 = {&spline, index_psi, tau_index2, u_tau2};
+        struct spline_params sp5 = {&spline, index_phi, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp5);
 
         /* Fourier transform to real space */
         c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -429,10 +457,19 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
+        c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
+        fft_execute(c2r2);
+        fft_normalize_c2r(box2, N, BoxLen);
+        fftw_destroy_plan(c2r2);
+
         if (rank == 0 && pars.OutputFields) {
             char psi_fname[50];
             sprintf(psi_fname, "%s/psi_%db.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box, N, BoxLen, psi_fname);
+
+            char phi_fname[50];
+            sprintf(phi_fname, "%s/phi_%dc.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box, N, BoxLen, phi_fname);
         }
 
         /* Integrate the particles during the second half-step */
@@ -444,9 +481,21 @@ int main(int argc, char *argv[]) {
             double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
 
+            /* Get the acceleration from the scalar potential phi */
+            double acc_phi[3];
+            accelCIC(box3, N, BoxLen, p->x, acc_phi);
+
+            double phi1 = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi2 = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double delta_phi = phi2 - phi1;
+            double phi_dot_c2 = delta_phi / dtau2 / (c * c);
+
             /* Fetch the relativistic correction factors */
             double q = p->v_i;
-            double epsfac = hypot(q, a_half * m_eV);
+            double q2 = q * q;
+            double epsfac = hypot(q, a * m_eV);
+            double epsfac_inv = 1. / epsfac;
+            double eps_inv2 = epsfac_inv * epsfac_inv;
 
             /* Compute kick factor */
             double kick = epsfac / c;
@@ -455,6 +504,23 @@ int main(int argc, char *argv[]) {
             p->v[0] -= acc[0] * kick * dtau2;
             p->v[1] -= acc[1] * kick * dtau2;
             p->v[2] -= acc[2] * kick * dtau2;
+
+            /* Add anti-symmetric terms */
+            p->v[0] -= acc_phi[0] * kick * dtau2 * q2 * eps_inv2;
+            p->v[1] -= acc_phi[1] * kick * dtau2 * q2 * eps_inv2;
+            p->v[2] -= acc_phi[2] * kick * dtau2 * q2 * eps_inv2;
+
+            double sum_term = acc_phi[0] * p->v[0] + acc_phi[1] * p->v[1] +
+                              acc_phi[2] * p->v[2];
+
+            p->v[0] += p->v[0] * sum_term * kick * dtau2 * eps_inv2;
+            p->v[1] += p->v[1] * sum_term * kick * dtau2 * eps_inv2;
+            p->v[2] += p->v[2] * sum_term * kick * dtau2 * eps_inv2;
+
+            /* Add contribution from evolving potential */
+            p->v[0] += p->v[0] * phi_dot_c2 * dtau2;
+            p->v[1] += p->v[1] * phi_dot_c2 * dtau2;
+            p->v[2] += p->v[2] * phi_dot_c2 * dtau2;
         }
 
         /* Step forward */
@@ -637,6 +703,7 @@ int main(int argc, char *argv[]) {
     free(fbox2);
     free(fbox3);
     free(box2);
+    free(box3);
 
     header(rank, "Prepare output");
 
