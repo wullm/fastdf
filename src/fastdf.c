@@ -182,18 +182,25 @@ int main(int argc, char *argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    double z_begin = 1./cosmo.a_begin - 1;
-    double log_tau_begin = perturbLogTauAtRedshift(&spline, z_begin);
+    double z_end = 1./cosmo.a_end - 1;
+    double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
 
 
     header(rank, "Generating pre-initial conditions");
     message(rank, "Generating pre-initial grids.\n");
+    
+    /* Compute the isentropic ratio and equation of state at a_end */
+    const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
+    const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
+    message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, cosmo.a_end);
+    message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
+
     {
 
         /* Find the interpolation index along the time dimension */
         int tau_index; //greatest lower bound bin index
         double u_tau; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_begin, &tau_index, &u_tau);
+        perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
 
         /* The indices of the potential transfer function */
         int index_psi = findTitle(ptdat.titles, title, ptdat.n_functions);
@@ -244,7 +251,7 @@ int main(int argc, char *argv[]) {
         double dnu = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
         /* The local temperature perturbation dT/T */
-        double deltaT = dnu/4;
+        double deltaT = dnu/isen_ncdm;
 
         /* Apply the perturbation */
         p->v[0] *= 1 + deltaT;
