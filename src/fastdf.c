@@ -188,7 +188,7 @@ int main(int argc, char *argv[]) {
 
     header(rank, "Generating pre-initial conditions");
     message(rank, "Generating pre-initial grids.\n");
-    
+
     /* Compute the isentropic ratio and equation of state at a_end */
     const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
     const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
@@ -204,12 +204,16 @@ int main(int argc, char *argv[]) {
 
         /* The indices of the potential transfer function */
         int index_psi = findTitle(ptdat.titles, title, ptdat.n_functions);
+        int index_theta = findTitle(ptdat.titles, "t_ncdm[0]", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
+        struct spline_params sp2 = {&spline, index_theta, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_inv_poisson, NULL);
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -217,10 +221,19 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
+        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
+        fft_execute(c2r2);
+        fft_normalize_c2r(box2, N, BoxLen);
+        fftw_destroy_plan(c2r2);
+
         if (rank == 0 && pars.OutputFields) {
             char dnu_fname[50];
             sprintf(dnu_fname, "%s/ic_dnu.hdf5", pars.OutputDirectory);
             writeFieldFile(box, N, BoxLen, dnu_fname);
+
+            char tnu_fname[50];
+            sprintf(tnu_fname, "%s/ic_tnu.hdf5", pars.OutputDirectory);
+            writeFieldFile(box2, N, BoxLen, tnu_fname);
         }
 
     }
@@ -250,13 +263,22 @@ int main(int argc, char *argv[]) {
         /* Determine the density perturbation at this point */
         double dnu = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
+        /* Determine the velocity perturbation at this point */
+        double velnu[3];
+        accelCIC(box2, N, BoxLen, p->x, velnu);
+
         /* The local temperature perturbation dT/T */
         double deltaT = dnu/isen_ncdm;
 
-        /* Apply the perturbation */
+        /* Apply the density perturbation */
         p->v[0] *= 1 + deltaT;
         p->v[1] *= 1 + deltaT;
         p->v[2] *= 1 + deltaT;
+
+        /* Apply the velocity perturbation */
+        p->v[0] += velnu[0] / c * m_eV;
+        p->v[1] += velnu[1] / c * m_eV;
+        p->v[2] += velnu[2] / c * m_eV;
 
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
