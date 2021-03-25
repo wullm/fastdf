@@ -219,7 +219,7 @@ int main(int argc, char *argv[]) {
         /* Multiply by the appropriate factor */
         for (int i=0; i<N*N*N; i++) {
             box[i] *= -2 / (c * c);
-            box2[i] *= 0.5 * exp(log_tau_begin) / (c * c);
+            box2[i] *= 0.5 * exp(log_tau_begin);
         }
 
         if (rank == 0 && pars.OutputFields) {
