@@ -629,9 +629,9 @@ int main(int argc, char *argv[]) {
         double eps_eV = hypot(p_eV/a_end, m_eV);
 
         /* Apply the velocity shift */
-        p->v[0] -= vel[0] / c * eps_eV * cosmo.a_end;
-        p->v[1] -= vel[1] / c * eps_eV * cosmo.a_end;
-        p->v[2] -= vel[2] / c * eps_eV * cosmo.a_end;
+        p->v[0] += vel[0] / c * eps_eV * cosmo.a_end;
+        p->v[1] += vel[1] / c * eps_eV * cosmo.a_end;
+        p->v[2] += vel[2] / c * eps_eV * cosmo.a_end;
     }
 
     /* Final operations before writing the particles to disk */
