@@ -511,11 +511,13 @@ int main(int argc, char *argv[]) {
         int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
         int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
         int index_ncdm = findTitle(ptdat.titles, "d_ncdm[0]", ptdat.n_functions);
+        int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_hdot, tau_index, u_tau};
         struct spline_params sp2 = {&spline, index_etadot, tau_index, u_tau};
         struct spline_params sp3 = {&spline, index_Nbshift, tau_index, u_tau};
+        struct spline_params sp4 = {&spline, index_HTNbp, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
@@ -527,7 +529,7 @@ int main(int argc, char *argv[]) {
             fbox[i] += 6 * fbox2[i];
         }
 
-        /* Apply the Poisson kernel -1/k^2 */
+        /* Apply the inverse Poisson kernel -1/k^2 */
         fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
 
         /* Fourier transform to real space */
@@ -580,6 +582,24 @@ int main(int argc, char *argv[]) {
             box[i] -= box2[i];
         }
 
+        /* Apply the transfer function for H_T_Nb_prime */
+        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
+
+        /* Apply the inverse Poisson kernel -1/k^2 */
+        fft_apply_kernel(fbox3, fbox3, N, BoxLen, kernel_inv_poisson, NULL);
+
+        /* Fourier transform to real space */
+        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
+        fft_execute(c2r3);
+        fft_normalize_c2r(box2, N, BoxLen);
+        fftw_destroy_plan(c2r3);
+
+        if (rank == 0 && pars.OutputFields) {
+            char vshift_fname[50];
+            sprintf(vshift_fname, "%s/gauge_vshift.hdf5", pars.OutputDirectory);
+            writeFieldFile(box2, N, BoxLen, vshift_fname);
+        }
+
     }
 
     message(rank, "Applying gauge transformation to the particles.\n");
@@ -595,10 +615,23 @@ int main(int argc, char *argv[]) {
         /* The equivalent temperature perturbation dT/T */
         double deltaT = delta/isen_ncdm;
 
-        /* Apply the perturbation */
+        /* Determine the velocity shift at this point */
+        double vel[3];
+        accelCIC(box2, N, BoxLen, p->x, vel);
+
+        /* Apply the density shift */
         p->v[0] *= 1 - deltaT;
         p->v[1] *= 1 - deltaT;
         p->v[2] *= 1 - deltaT;
+
+        /* The energy current */
+        double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+        double eps_eV = hypot(p_eV/a_end, m_eV);
+
+        /* Apply the velocity shift */
+        p->v[0] -= vel[0] / c * eps_eV * cosmo.a_end;
+        p->v[1] -= vel[1] / c * eps_eV * cosmo.a_end;
+        p->v[2] -= vel[2] / c * eps_eV * cosmo.a_end;
     }
 
     /* Final operations before writing the particles to disk */
