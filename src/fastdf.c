@@ -213,14 +213,22 @@ int main(int argc, char *argv[]) {
         /* Retrieve  physical constant */
         const double c = us.SpeedOfLight;
 
+        /* Copy into the second box for the velocity perturbation */
+        memcpy(box2, box, N*N*N*sizeof(double));
+
         /* Multiply by the appropriate factor */
         for (int i=0; i<N*N*N; i++) {
             box[i] *= -2 / (c * c);
+            box2[i] *= 0.5 * exp(log_tau_begin) / (c * c);
         }
 
         if (rank == 0 && pars.OutputFields) {
             char dnu_fname[50];
             sprintf(dnu_fname, "%s/ic_dnu.hdf5", pars.OutputDirectory);
+            writeFieldFile(box, N, BoxLen, dnu_fname);
+
+            char tnu_fname[50];
+            sprintf(tnu_fname, "%s/ic_tnu.hdf5", pars.OutputDirectory);
             writeFieldFile(box, N, BoxLen, dnu_fname);
         }
 
@@ -254,10 +262,22 @@ int main(int argc, char *argv[]) {
         /* The local temperature perturbation dT/T */
         double deltaT = dnu/4;
 
+        /* Determine the initial velocity perturbation at this point */
+        double vel[3];
+        accelCIC(box2, N, BoxLen, p->x, vel);
+
         /* Apply the perturbation */
         p->v[0] *= 1 + deltaT;
         p->v[1] *= 1 + deltaT;
         p->v[2] *= 1 + deltaT;
+
+        /* The current energy */
+        double eps_eV = hypot(p_eV/cosmo.a_begin, m_eV);
+
+        /* Apply the velocity perturbation */
+        p->v[0] += vel[0] / c * eps_eV * cosmo.a_begin;
+        p->v[1] += vel[1] / c * eps_eV * cosmo.a_begin;
+        p->v[2] += vel[2] / c * eps_eV * cosmo.a_begin;
 
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
@@ -624,7 +644,7 @@ int main(int argc, char *argv[]) {
         p->v[1] *= 1 - deltaT;
         p->v[2] *= 1 - deltaT;
 
-        /* The energy current */
+        /* The current energy */
         double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
         double eps_eV = hypot(p_eV/a_end, m_eV);
 
