@@ -1,5 +1,5 @@
-FastDF: Integrate neutrino geodesics in linear theory
-=====================================================
+FastDF: Integrate geodesics in linear theory
+============================================
 
 Author: Willem Elbers
 
