@@ -97,6 +97,22 @@ int main(int argc, char *argv[]) {
 
     header(rank, "Simulation parameters");
     message(rank, "We want %lld (%d^3) particles\n", pars.NumPartGenerate, pars.CubeRootNumber);
+
+    /* Check if we recognize the output gauge */
+    int gauge_Nbody = 0;
+    if (strcmp(pars.Gauge, "Newtonian") == 0 ||
+        strcmp(pars.Gauge, "newtonian") == 0) {
+        message(rank, "Output gauge: Newtonian\n");
+    } else if (strcmp(pars.Gauge, "N-body") == 0 ||
+               strcmp(pars.Gauge, "n-body") == 0 ||
+               strcmp(pars.Gauge, "nbody") == 0) {
+        message(rank, "Output gauge: N-body\n");
+        gauge_Nbody = 1;
+    } else {
+        message(rank, "Error: unknown output gauge.\n");
+        exit(1);
+    }
+
     message(rank, "a_begin = %.3e (z = %.2f)\n", cosmo.a_begin, 1./cosmo.a_begin - 1);
     message(rank, "a_end = %.3e (z = %.2f)\n", cosmo.a_end, 1./cosmo.a_end - 1);
 
@@ -504,154 +520,157 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    header(rank, "Generating gauge transformation grid");
+    if (gauge_Nbody) {
 
-    /* Compute the isentropic ratio and equation of state at a_end */
-    const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
-    const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
-    message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, cosmo.a_end);
-    message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
+        header(rank, "Generating N-body gauge transformation grid");
 
-    {
-        /* Final time at which to execute the gauge transformation */
-        double z_end = 1./cosmo.a_end - 1;
-        double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
+        /* Compute the isentropic ratio and equation of state at a_end */
+        const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
+        const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
+        message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, cosmo.a_end);
+        message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
 
-        double a2 = cosmo.a_end * 1.001;
-        double z2 =  1./a2 - 1;
-        double log_tau2 = perturbLogTauAtRedshift(&spline, z2);
+        {
+            /* Final time at which to execute the gauge transformation */
+            double z_end = 1./cosmo.a_end - 1;
+            double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
 
-        /* Find the interpolation index along the time dimension */
-        int tau_index; //greatest lower bound bin index
-        double u_tau; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
+            double a2 = cosmo.a_end * 1.001;
+            double z2 =  1./a2 - 1;
+            double log_tau2 = perturbLogTauAtRedshift(&spline, z2);
 
-        /* The indices of the potential transfer function */
-        int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
-        int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
-        int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
-        int index_ncdm = findTitle(ptdat.titles, "d_ncdm[0]", ptdat.n_functions);
-        int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
+            /* Find the interpolation index along the time dimension */
+            int tau_index; //greatest lower bound bin index
+            double u_tau; //spacing between subsequent bins
+            perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
 
-        /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp = {&spline, index_hdot, tau_index, u_tau};
-        struct spline_params sp2 = {&spline, index_etadot, tau_index, u_tau};
-        struct spline_params sp3 = {&spline, index_Nbshift, tau_index, u_tau};
-        struct spline_params sp4 = {&spline, index_HTNbp, tau_index, u_tau};
+            /* The indices of the potential transfer function */
+            int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
+            int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
+            int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
+            int index_ncdm = findTitle(ptdat.titles, "d_ncdm[0]", ptdat.n_functions);
+            int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
 
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
-        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
+            /* Package the perturbation theory interpolation spline parameters */
+            struct spline_params sp = {&spline, index_hdot, tau_index, u_tau};
+            struct spline_params sp2 = {&spline, index_etadot, tau_index, u_tau};
+            struct spline_params sp3 = {&spline, index_Nbshift, tau_index, u_tau};
+            struct spline_params sp4 = {&spline, index_HTNbp, tau_index, u_tau};
 
-        /* Compute alpha * k^2 = h_dot + 6 * eta_dot */
-        for (int i=0; i<N*N*(N/2+1); i++) {
-            fbox[i] += 6 * fbox2[i];
+            /* Apply the transfer function (read only fgrf, output into fbox) */
+            fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
+            fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
+            fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
+
+            /* Compute alpha * k^2 = h_dot + 6 * eta_dot */
+            for (int i=0; i<N*N*(N/2+1); i++) {
+                fbox[i] += 6 * fbox2[i];
+            }
+
+            /* Apply the inverse Poisson kernel -1/k^2 */
+            fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
+
+            /* Fourier transform to real space */
+            fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
+            fft_execute(c2r);
+            fft_normalize_c2r(box, N, BoxLen);
+            fftw_destroy_plan(c2r);
+
+            fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
+            fft_execute(c2r2);
+            fft_normalize_c2r(box2, N, BoxLen);
+            fftw_destroy_plan(c2r2);
+
+            /* Compute the conformatl time derivative of the background density */
+            double Omega_nu1 = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
+            double Omega_nu2 = perturbDensityAtLogTau(&spline, log_tau2, index_ncdm);
+
+            double H1 = perturbHubbleAtLogTau(&spline, log_tau_end);
+            double H2 = perturbHubbleAtLogTau(&spline, log_tau2);
+
+            double H_0 = cosmo.H_0;
+            double rho_crit1 = cosmo.rho_crit * (H1 * H1) / (H_0 * H_0);
+            double rho_crit2 = cosmo.rho_crit * (H2 * H2) / (H_0 * H_0);
+
+            double rho_nu1 = Omega_nu1 * rho_crit1;
+            double rho_nu2 = Omega_nu2 * rho_crit2;
+
+            double dtau = exp(log_tau2) - exp(log_tau_end);
+            double rho_dot = (rho_nu2 - rho_nu1) / dtau;
+            double rho_dot_rho = rho_dot / rho_nu1;
+
+            /* Multiply by the appropriate factor */
+            for (int i=0; i<N*N*N; i++) {
+                box[i] *= -0.5 * rho_dot_rho / (c * c * c * c);
+                box2[i] *= 1 + w_ncdm;
+            }
+
+            if (rank == 0 && pars.OutputFields) {
+                char alpha_fname[50];
+                sprintf(alpha_fname, "%s/gauge_alpha.hdf5", pars.OutputDirectory);
+                writeFieldFile(box, N, BoxLen, alpha_fname);
+
+                char Nbshift_fname[50];
+                sprintf(Nbshift_fname, "%s/gauge_Nbshift.hdf5", pars.OutputDirectory);
+                writeFieldFile(box2, N, BoxLen, Nbshift_fname);
+            }
+
+            /* Add the N-body gauge shift to the overall gauge shift */
+            for (int i=0; i<N*N*N; i++) {
+                box[i] -= box2[i];
+            }
+
+            /* Apply the transfer function for H_T_Nb_prime */
+            fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
+
+            /* Apply the inverse Poisson kernel -1/k^2 */
+            fft_apply_kernel(fbox3, fbox3, N, BoxLen, kernel_inv_poisson, NULL);
+
+            /* Fourier transform to real space */
+            fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
+            fft_execute(c2r3);
+            fft_normalize_c2r(box2, N, BoxLen);
+            fftw_destroy_plan(c2r3);
+
+            if (rank == 0 && pars.OutputFields) {
+                char vshift_fname[50];
+                sprintf(vshift_fname, "%s/gauge_vshift.hdf5", pars.OutputDirectory);
+                writeFieldFile(box2, N, BoxLen, vshift_fname);
+            }
+
         }
 
-        /* Apply the inverse Poisson kernel -1/k^2 */
-        fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
+        message(rank, "Applying N-body gauge transformation to the particles.\n");
 
-        /* Fourier transform to real space */
-        fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
-        fft_execute(c2r);
-        fft_normalize_c2r(box, N, BoxLen);
-        fftw_destroy_plan(c2r);
+        /* Perform the gauge transformation */
+        #pragma omp parallel for
+        for (int i=0; i<localParticleNumber; i++) {
+            struct particle_ext *p = &genparts[i];
 
-        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
-        fft_execute(c2r2);
-        fft_normalize_c2r(box2, N, BoxLen);
-        fftw_destroy_plan(c2r2);
+            /* Determine the gauge shift at this point */
+            double delta = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
-        /* Compute the conformatl time derivative of the background density */
-        double Omega_nu1 = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
-        double Omega_nu2 = perturbDensityAtLogTau(&spline, log_tau2, index_ncdm);
+            /* The equivalent temperature perturbation dT/T */
+            double deltaT = delta/isen_ncdm;
 
-        double H1 = perturbHubbleAtLogTau(&spline, log_tau_end);
-        double H2 = perturbHubbleAtLogTau(&spline, log_tau2);
+            /* Determine the velocity shift at this point */
+            double vel[3];
+            accelCIC(box2, N, BoxLen, p->x, vel);
 
-        double H_0 = cosmo.H_0;
-        double rho_crit1 = cosmo.rho_crit * (H1 * H1) / (H_0 * H_0);
-        double rho_crit2 = cosmo.rho_crit * (H2 * H2) / (H_0 * H_0);
+            /* Apply the density shift */
+            p->v[0] *= 1 - deltaT;
+            p->v[1] *= 1 - deltaT;
+            p->v[2] *= 1 - deltaT;
 
-        double rho_nu1 = Omega_nu1 * rho_crit1;
-        double rho_nu2 = Omega_nu2 * rho_crit2;
+            /* The current energy */
+            double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+            double eps_eV = hypot(p_eV/a_end, m_eV);
 
-        double dtau = exp(log_tau2) - exp(log_tau_end);
-        double rho_dot = (rho_nu2 - rho_nu1) / dtau;
-        double rho_dot_rho = rho_dot / rho_nu1;
-
-        /* Multiply by the appropriate factor */
-        for (int i=0; i<N*N*N; i++) {
-            box[i] *= -0.5 * rho_dot_rho / (c * c * c * c);
-            box2[i] *= 1 + w_ncdm;
+            /* Apply the velocity shift */
+            p->v[0] += vel[0] / c * eps_eV * cosmo.a_end;
+            p->v[1] += vel[1] / c * eps_eV * cosmo.a_end;
+            p->v[2] += vel[2] / c * eps_eV * cosmo.a_end;
         }
-
-        if (rank == 0 && pars.OutputFields) {
-            char alpha_fname[50];
-            sprintf(alpha_fname, "%s/gauge_alpha.hdf5", pars.OutputDirectory);
-            writeFieldFile(box, N, BoxLen, alpha_fname);
-
-            char Nbshift_fname[50];
-            sprintf(Nbshift_fname, "%s/gauge_Nbshift.hdf5", pars.OutputDirectory);
-            writeFieldFile(box2, N, BoxLen, Nbshift_fname);
-        }
-
-        /* Add the N-body gauge shift to the overall gauge shift */
-        for (int i=0; i<N*N*N; i++) {
-            box[i] -= box2[i];
-        }
-
-        /* Apply the transfer function for H_T_Nb_prime */
-        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
-
-        /* Apply the inverse Poisson kernel -1/k^2 */
-        fft_apply_kernel(fbox3, fbox3, N, BoxLen, kernel_inv_poisson, NULL);
-
-        /* Fourier transform to real space */
-        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
-        fft_execute(c2r3);
-        fft_normalize_c2r(box2, N, BoxLen);
-        fftw_destroy_plan(c2r3);
-
-        if (rank == 0 && pars.OutputFields) {
-            char vshift_fname[50];
-            sprintf(vshift_fname, "%s/gauge_vshift.hdf5", pars.OutputDirectory);
-            writeFieldFile(box2, N, BoxLen, vshift_fname);
-        }
-
-    }
-
-    message(rank, "Applying gauge transformation to the particles.\n");
-
-    /* Perform the gauge transformation */
-    #pragma omp parallel for
-    for (int i=0; i<localParticleNumber; i++) {
-        struct particle_ext *p = &genparts[i];
-
-        /* Determine the gauge shift at this point */
-        double delta = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-
-        /* The equivalent temperature perturbation dT/T */
-        double deltaT = delta/isen_ncdm;
-
-        /* Determine the velocity shift at this point */
-        double vel[3];
-        accelCIC(box2, N, BoxLen, p->x, vel);
-
-        /* Apply the density shift */
-        p->v[0] *= 1 - deltaT;
-        p->v[1] *= 1 - deltaT;
-        p->v[2] *= 1 - deltaT;
-
-        /* The current energy */
-        double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
-        double eps_eV = hypot(p_eV/a_end, m_eV);
-
-        /* Apply the velocity shift */
-        p->v[0] += vel[0] / c * eps_eV * cosmo.a_end;
-        p->v[1] += vel[1] / c * eps_eV * cosmo.a_end;
-        p->v[2] += vel[2] / c * eps_eV * cosmo.a_end;
     }
 
     /* Final operations before writing the particles to disk */

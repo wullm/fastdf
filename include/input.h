@@ -49,6 +49,7 @@ struct params {
     char *Name;
     char *PerturbFile;
     char *TransferFunctionDensity;
+    char *Gauge;
     double ScaleFactorBegin;
     double ScaleFactorEnd;
     double ScaleFactorStep;
