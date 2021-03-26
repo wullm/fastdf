@@ -360,7 +360,12 @@ int main(int argc, char *argv[]) {
         /* Find the interpolation index along the time dimension */
         int tau_index2; //greatest lower bound bin index
         double u_tau2; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_next, &tau_index2, &u_tau2);
+        perturbSplineFindTau(&spline, log_tau_half, &tau_index2, &u_tau2);
+
+        /* Find the interpolation index along the time dimension */
+        int tau_index3; //greatest lower bound bin index
+        double u_tau3; //spacing between subsequent bins
+        perturbSplineFindTau(&spline, log_tau_next, &tau_index3, &u_tau3);
 
         /* The index of the potential transfer function psi */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
@@ -376,10 +381,14 @@ int main(int argc, char *argv[]) {
         fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
         fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
 
+        /* Now fbox = psi(a), fbox2 = phi(a), fbox3 = phi(a_half) */
+
         /* Compute the difference */
         for (int i=0; i<N*N*(N/2+1); i++) {
-            fbox3[i] -= fbox2[i];
+            fbox2[i] = fbox3[i] - fbox2[i];
         }
+
+        /* Now fbox2 = phi(a_half) - phi(a) */
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -387,13 +396,14 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
-        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
+        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
         fft_execute(c2r2);
         fft_normalize_c2r(box2, N, BoxLen);
         fftw_destroy_plan(c2r2);
 
+        /* Turn it into a conformal time derivative phi_dot */
         for (int i=0; i<N*N*N; i++) {
-            box2[i] /= dtau;
+            box2[i] /= dtau1;
         }
 
         if (rank == 0 && pars.OutputFields > 1) {
@@ -438,9 +448,9 @@ int main(int argc, char *argv[]) {
             p->v[2] -= acc[2] * kick * dtau1;
 
             /* Add potential derivative term */
-            p->v[0] += p->v[0] * phi_dot_c2 * dtau;
-            p->v[1] += p->v[1] * phi_dot_c2 * dtau;
-            p->v[2] += p->v[2] * phi_dot_c2 * dtau;
+            p->v[0] += p->v[0] * phi_dot_c2 * dtau1;
+            p->v[1] += p->v[1] * phi_dot_c2 * dtau1;
+            p->v[2] += p->v[2] * phi_dot_c2 * dtau1;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift * dtau;
@@ -450,14 +460,22 @@ int main(int argc, char *argv[]) {
 
         /* Next, we will compute the potential at the half-step time */
 
-        /* Find the interpolation index along the time dimension */
-        perturbSplineFindTau(&spline, log_tau_half, &tau_index, &u_tau);
-
         /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp4 = {&spline, index_psi, tau_index, u_tau};
+        struct spline_params sp4 = {&spline, index_psi, tau_index2, u_tau2};
+        struct spline_params sp5 = {&spline, index_phi, tau_index3, u_tau3};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp5);
+
+        /* Now fbox = psi(a_half), fbox2 = phi(a_next), fbox3 = phi(a_half) */
+
+        /* Compute the difference */
+        for (int i=0; i<N*N*(N/2+1); i++) {
+            fbox2[i] -= fbox3[i];
+        }
+
+        /* Now fbox2 = phi(a_next) - phi(a_half) */
 
         /* Fourier transform to real space */
         c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -465,10 +483,24 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
+        c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
+        fft_execute(c2r2);
+        fft_normalize_c2r(box2, N, BoxLen);
+        fftw_destroy_plan(c2r2);
+
+        /* Turn it into a conformal time derivative phi_dot */
+        for (int i=0; i<N*N*N; i++) {
+            box2[i] /= dtau2;
+        }
+
         if (rank == 0 && pars.OutputFields > 1) {
             char psi_fname[50];
             sprintf(psi_fname, "%s/psi_%db.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box, N, BoxLen, psi_fname);
+
+            char phidot_fname[50];
+            sprintf(phidot_fname, "%s/dotphi_%db.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box2, N, BoxLen, phidot_fname);
         }
 
         /* Integrate the particles during the second half-step */
@@ -479,6 +511,10 @@ int main(int argc, char *argv[]) {
             /* Get the acceleration from the scalar potential psi */
             double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
+
+            /* Also fetch the value of the potential at the particle position */
+            double phi_dot = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot_c2 = phi_dot / (c * c);
 
             /* Fetch the relativistic correction factors */
             double q = p->v_i;
@@ -491,6 +527,11 @@ int main(int argc, char *argv[]) {
             p->v[0] -= acc[0] * kick * dtau2;
             p->v[1] -= acc[1] * kick * dtau2;
             p->v[2] -= acc[2] * kick * dtau2;
+
+            /* Add potential derivative term */
+            p->v[0] += p->v[0] * phi_dot_c2 * dtau2;
+            p->v[1] += p->v[1] * phi_dot_c2 * dtau2;
+            p->v[2] += p->v[2] * phi_dot_c2 * dtau2;
         }
 
         /* Step forward */
