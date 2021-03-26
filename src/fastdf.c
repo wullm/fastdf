@@ -301,7 +301,10 @@ int main(int argc, char *argv[]) {
         p->f_i = f_i;
 
         /* Compute the magnitude of the initial velocity */
-        p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
+        p->v_i[0] = p->v[0];
+        p->v_i[1] = p->v[1];
+        p->v_i[2] = p->v[2];
+        p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
 
     }
 
@@ -433,7 +436,7 @@ int main(int argc, char *argv[]) {
             double phi_dot_c2 = phi_dot / (c * c);
 
             /* Fetch the relativistic correction factors */
-            double q = p->v_i;
+            double q = p->v_i_mag;
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1. / epsfac;
             double drift_factor = (3 - q * q * epsfac_inv * epsfac_inv) * psi_c2;
@@ -448,9 +451,9 @@ int main(int argc, char *argv[]) {
             p->v[2] -= acc[2] * kick * dtau1;
 
             /* Add potential derivative term */
-            p->v[0] += p->v[0] * phi_dot_c2 * dtau1;
-            p->v[1] += p->v[1] * phi_dot_c2 * dtau1;
-            p->v[2] += p->v[2] * phi_dot_c2 * dtau1;
+            p->v[0] += p->v_i[0] * phi_dot_c2 * dtau1;
+            p->v[1] += p->v_i[1] * phi_dot_c2 * dtau1;
+            p->v[2] += p->v_i[2] * phi_dot_c2 * dtau1;
 
             /* Execute drift */
             p->x[0] += p->v[0] * drift * dtau;
@@ -517,7 +520,7 @@ int main(int argc, char *argv[]) {
             double phi_dot_c2 = phi_dot / (c * c);
 
             /* Fetch the relativistic correction factors */
-            double q = p->v_i;
+            double q = p->v_i_mag;
             double epsfac = hypot(q, a_half * m_eV);
 
             /* Compute kick factor */
@@ -529,9 +532,9 @@ int main(int argc, char *argv[]) {
             p->v[2] -= acc[2] * kick * dtau2;
 
             /* Add potential derivative term */
-            p->v[0] += p->v[0] * phi_dot_c2 * dtau2;
-            p->v[1] += p->v[1] * phi_dot_c2 * dtau2;
-            p->v[2] += p->v[2] * phi_dot_c2 * dtau2;
+            p->v[0] += p->v_i[0] * phi_dot_c2 * dtau2;
+            p->v[1] += p->v_i[1] * phi_dot_c2 * dtau2;
+            p->v[2] += p->v_i[2] * phi_dot_c2 * dtau2;
         }
 
         /* Step forward */
