@@ -229,7 +229,7 @@ int main(int argc, char *argv[]) {
 
             char tnu_fname[50];
             sprintf(tnu_fname, "%s/ic_tnu.hdf5", pars.OutputDirectory);
-            writeFieldFile(box, N, BoxLen, dnu_fname);
+            writeFieldFile(box2, N, BoxLen, dnu_fname);
         }
 
     }
@@ -380,7 +380,7 @@ int main(int argc, char *argv[]) {
             box2[i] /= dtau;
         }
 
-        if (rank == 0 && pars.OutputFields) {
+        if (rank == 0 && pars.OutputFields > 1) {
             char psi_fname[50];
             sprintf(psi_fname, "%s/psi_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box, N, BoxLen, psi_fname);
@@ -421,7 +421,7 @@ int main(int argc, char *argv[]) {
             p->v[1] -= acc[1] * kick * dtau1;
             p->v[2] -= acc[2] * kick * dtau1;
 
-            /* Execute Sachs-Wolfe correction */
+            /* Add potential derivative term */
             p->v[0] += p->v[0] * phi_dot_c2 * dtau;
             p->v[1] += p->v[1] * phi_dot_c2 * dtau;
             p->v[2] += p->v[2] * phi_dot_c2 * dtau;
@@ -449,7 +449,7 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
-        if (rank == 0 && pars.OutputFields) {
+        if (rank == 0 && pars.OutputFields > 1) {
             char psi_fname[50];
             sprintf(psi_fname, "%s/psi_%db.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box, N, BoxLen, psi_fname);
