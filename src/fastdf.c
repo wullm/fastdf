@@ -548,7 +548,7 @@ int main(int argc, char *argv[]) {
             int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
             int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
             int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
-            int index_ncdm = findTitle(ptdat.titles, "d_ncdm[0]", ptdat.n_functions);
+            int index_ncdm = findTitle(ptdat.titles, title, ptdat.n_functions);
             int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
 
             /* Package the perturbation theory interpolation spline parameters */
