@@ -137,9 +137,11 @@ int main(int argc, char *argv[]) {
     fft_normalize_r2c(fbox, N, BoxLen);
     fftw_destroy_plan(r2c);
 
+    /* Allocate additional boxes */
     fftw_complex *fbox2 = malloc(N*N*N*sizeof(fftw_complex));
     fftw_complex *fbox3 = malloc(N*N*N*sizeof(fftw_complex));
     double *box2 = malloc(N*N*N*sizeof(double));
+    double *box3 = malloc(N*N*N*sizeof(double));
 
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
@@ -355,43 +357,28 @@ int main(int argc, char *argv[]) {
         double dtau2 = exp(log_tau_next) - exp(log_tau_half);
         double dtau = dtau1 + dtau2;
 
-        /* Find the interpolation index along the time dimension */
-        int tau_index; //greatest lower bound bin index
-        double u_tau; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau, &tau_index, &u_tau);
-
-        /* Find the interpolation index along the time dimension */
-        int tau_index2; //greatest lower bound bin index
-        double u_tau2; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_half, &tau_index2, &u_tau2);
-
-        /* Find the interpolation index along the time dimension */
-        int tau_index3; //greatest lower bound bin index
-        double u_tau3; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_next, &tau_index3, &u_tau3);
+        /* Find the interpolation indices along the time dimension */
+        int tau_idx_curr, tau_idx_half, tau_idx_next;
+        double u_curr, u_half, u_next;
+        perturbSplineFindTau(&spline, log_tau, &tau_idx_curr, &u_curr);
+        perturbSplineFindTau(&spline, log_tau_half, &tau_idx_half, &u_half);
+        perturbSplineFindTau(&spline, log_tau_next, &tau_idx_next, &u_next);
 
         /* The index of the potential transfer function psi */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
         int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
-        struct spline_params sp2 = {&spline, index_phi, tau_index, u_tau};
-        struct spline_params sp3 = {&spline, index_phi, tau_index2, u_tau2};
+        struct spline_params sp_psi_curr = {&spline, index_psi, tau_idx_curr, u_curr};
+        struct spline_params sp_phi_curr = {&spline, index_phi, tau_idx_curr, u_curr};
+        struct spline_params sp_phi_half = {&spline, index_phi, tau_idx_half, u_half};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
-        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
+        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp_psi_curr);
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_curr);
+        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_half);
 
         /* Now fbox = psi(a), fbox2 = phi(a), fbox3 = phi(a_half) */
-
-        /* Compute the difference */
-        for (int i=0; i<N*N*(N/2+1); i++) {
-            fbox2[i] = fbox3[i] - fbox2[i];
-        }
-
-        /* Now fbox2 = phi(a_half) - phi(a) */
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -404,19 +391,23 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box2, N, BoxLen);
         fftw_destroy_plan(c2r2);
 
-        /* Turn it into a conformal time derivative phi_dot */
-        for (int i=0; i<N*N*N; i++) {
-            box2[i] /= dtau1;
-        }
+        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box3, FFTW_ESTIMATE);
+        fft_execute(c2r3);
+        fft_normalize_c2r(box3, N, BoxLen);
+        fftw_destroy_plan(c2r3);
 
         if (rank == 0 && pars.OutputFields > 1) {
             char psi_fname[50];
             sprintf(psi_fname, "%s/psi_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box, N, BoxLen, psi_fname);
 
-            char phidot_fname[50];
-            sprintf(phidot_fname, "%s/dotphi_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box2, N, BoxLen, phidot_fname);
+            char phi_fname[50];
+            sprintf(phi_fname, "%s/phi_%d.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box2, N, BoxLen, phi_fname);
+
+            char phi_fname_b[50];
+            sprintf(phi_fname_b, "%s/phi_%db.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box3, N, BoxLen, phi_fname_b);
         }
 
         /* Integrate the particles */
@@ -428,34 +419,54 @@ int main(int argc, char *argv[]) {
             double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
 
+            /* Get the acceleration from the scalar potential phi */
+            double acc_phi[3];
+            accelCIC(box2, N, BoxLen, p->x, acc_phi);
+
             /* Also fetch the value of the potential at the particle position */
             double psi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
             double psi_c2 = psi / (c * c);
+            double phi_c2 = phi / (c * c);
 
-            double phi_dot = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            /* Also compute the time derivative of phi using finite difference */
+            double phi_half = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot = (phi_half - phi) / dtau1;
             double phi_dot_c2 = phi_dot / (c * c);
+
+            /* Inner product of v_i with acc_phi */
+            double vacx = p->v_i[0] * acc_phi[0];
+            double vacy = p->v_i[1] * acc_phi[1];
+            double vacz = p->v_i[2] * acc_phi[2];
+            double vac = vacx + vacy + vacz;
 
             /* Fetch the relativistic correction factors */
             double q = p->v_i_mag;
+            double q2 = q * q;
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1. / epsfac;
-            double drift_factor = (3 - q * q * epsfac_inv * epsfac_inv) * psi_c2;
 
             /* Compute kick and drift factors */
-            double kick = epsfac / c;
-            double drift = epsfac_inv * (1.0 + drift_factor) * c;
+            double kick_psi = epsfac / c;
+            double kick_phi = epsfac_inv / c;
+            double drift = epsfac_inv * (1.0 + psi_c2 + phi_c2) * c;
 
-            /* Execute first kick */
-            p->v[0] -= acc[0] * kick * dtau1;
-            p->v[1] -= acc[1] * kick * dtau1;
-            p->v[2] -= acc[2] * kick * dtau1;
+            /* Execute first gradient term */
+            p->v[0] -= acc[0] * kick_psi * dtau1;
+            p->v[1] -= acc[1] * kick_psi * dtau1;
+            p->v[2] -= acc[2] * kick_psi * dtau1;
+
+            /* Add anti-symmetric gradient term (only rotates) */
+            p->v[0] -= (q2 * acc_phi[0] - p->v_i[0] * vac) * kick_phi * dtau1;
+            p->v[1] -= (q2 * acc_phi[1] - p->v_i[1] * vac) * kick_phi * dtau1;
+            p->v[2] -= (q2 * acc_phi[2] - p->v_i[2] * vac) * kick_phi * dtau1;
 
             /* Add potential derivative term */
             p->v[0] += p->v_i[0] * phi_dot_c2 * dtau1;
             p->v[1] += p->v_i[1] * phi_dot_c2 * dtau1;
             p->v[2] += p->v_i[2] * phi_dot_c2 * dtau1;
 
-            /* Execute drift */
+            /* Execute drift (only one drift, so use dtau = dtau1 + dtau2) */
             p->x[0] += p->v[0] * drift * dtau;
             p->x[1] += p->v[1] * drift * dtau;
             p->x[2] += p->v[2] * drift * dtau;
@@ -464,21 +475,14 @@ int main(int argc, char *argv[]) {
         /* Next, we will compute the potential at the half-step time */
 
         /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp4 = {&spline, index_psi, tau_index2, u_tau2};
-        struct spline_params sp5 = {&spline, index_phi, tau_index3, u_tau3};
+        struct spline_params sp_psi_half = {&spline, index_psi, tau_idx_half, u_half};
+        struct spline_params sp_phi_next = {&spline, index_phi, tau_idx_next, u_next};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp5);
+        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp_psi_half);
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_next);
 
         /* Now fbox = psi(a_half), fbox2 = phi(a_next), fbox3 = phi(a_half) */
-
-        /* Compute the difference */
-        for (int i=0; i<N*N*(N/2+1); i++) {
-            fbox2[i] -= fbox3[i];
-        }
-
-        /* Now fbox2 = phi(a_next) - phi(a_half) */
 
         /* Fourier transform to real space */
         c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -491,19 +495,14 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box2, N, BoxLen);
         fftw_destroy_plan(c2r2);
 
-        /* Turn it into a conformal time derivative phi_dot */
-        for (int i=0; i<N*N*N; i++) {
-            box2[i] /= dtau2;
-        }
-
         if (rank == 0 && pars.OutputFields > 1) {
             char psi_fname[50];
             sprintf(psi_fname, "%s/psi_%db.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box, N, BoxLen, psi_fname);
 
-            char phidot_fname[50];
-            sprintf(phidot_fname, "%s/dotphi_%db.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box2, N, BoxLen, phidot_fname);
+            char phi_fname[50];
+            sprintf(phi_fname, "%s/phi_%dc.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box2, N, BoxLen, phi_fname);
         }
 
         /* Integrate the particles during the second half-step */
@@ -515,21 +514,41 @@ int main(int argc, char *argv[]) {
             double acc[3];
             accelCIC(box, N, BoxLen, p->x, acc);
 
-            /* Also fetch the value of the potential at the particle position */
-            double phi_dot = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            /* Get the acceleration from the scalar potential phi */
+            double acc_phi[3];
+            accelCIC(box2, N, BoxLen, p->x, acc_phi);
+
+            /* Also compute the time derivative of phi using finite difference */
+            double phi_half = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_next = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot = (phi_next - phi_half) / dtau2;
             double phi_dot_c2 = phi_dot / (c * c);
+
+            /* Inner product of v_i with acc_phi */
+            double vacx = p->v_i[0] * acc_phi[0];
+            double vacy = p->v_i[1] * acc_phi[1];
+            double vacz = p->v_i[2] * acc_phi[2];
+            double vac = vacx + vacy + vacz;
 
             /* Fetch the relativistic correction factors */
             double q = p->v_i_mag;
-            double epsfac = hypot(q, a_half * m_eV);
+            double q2 = q * q;
+            double epsfac = hypot(q, a * m_eV);
+            double epsfac_inv = 1. / epsfac;
 
-            /* Compute kick factor */
-            double kick = epsfac / c;
+            /* Compute kick factors */
+            double kick_psi = epsfac / c;
+            double kick_phi = epsfac_inv / c;
 
-            /* Execute second kick */
-            p->v[0] -= acc[0] * kick * dtau2;
-            p->v[1] -= acc[1] * kick * dtau2;
-            p->v[2] -= acc[2] * kick * dtau2;
+            /* Execute first gradient term */
+            p->v[0] -= acc[0] * kick_psi * dtau2;
+            p->v[1] -= acc[1] * kick_psi * dtau2;
+            p->v[2] -= acc[2] * kick_psi * dtau2;
+
+            /* Add anti-symmetric gradient term (only rotates) */
+            p->v[0] -= (q2 * acc_phi[0] - p->v_i[0] * vac) * kick_phi * dtau2;
+            p->v[1] -= (q2 * acc_phi[1] - p->v_i[1] * vac) * kick_phi * dtau2;
+            p->v[2] -= (q2 * acc_phi[2] - p->v_i[2] * vac) * kick_phi * dtau2;
 
             /* Add potential derivative term */
             p->v[0] += p->v_i[0] * phi_dot_c2 * dtau2;
@@ -753,6 +772,7 @@ int main(int argc, char *argv[]) {
     free(fbox2);
     free(fbox3);
     free(box2);
+    free(box3);
 
     header(rank, "Prepare output");
 
