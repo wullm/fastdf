@@ -247,7 +247,7 @@ int main(int argc, char *argv[]) {
 
             char tnu_fname[50];
             sprintf(tnu_fname, "%s/ic_tnu.hdf5", pars.OutputDirectory);
-            writeFieldFile(box2, N, BoxLen, dnu_fname);
+            writeFieldFile(box2, N, BoxLen, tnu_fname);
         }
 
     }
