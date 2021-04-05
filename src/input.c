@@ -35,6 +35,9 @@ int readParams(struct params *pars, const char *fname) {
      pars->ScaleFactorEnd = ini_getd("Simulation", "ScaleFactorEnd", 0.01, fname);
      pars->ScaleFactorStep = ini_getd("Simulation", "ScaleFactorStep", 0.05, fname);
 
+     //override the perturb file if desired
+     pars->NeutrinoTemperature = ini_getd("Simulation", "NeutrinoTemperature", 0., fname);
+
      pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
 
      /* Read strings */

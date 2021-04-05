@@ -89,14 +89,24 @@ int main(int argc, char *argv[]) {
 
     /* Package physical constants */
     const double m_eV = ptpars.M_ncdm_eV[0];
-    const double T_nu = ptpars.T_ncdm[0] * ptpars.T_CMB;
+    const double T_nu_pt = ptpars.T_ncdm[0] * ptpars.T_CMB;
+
+    /* Override the neutrino temperature from the perturbation file if desired */
+    double T_nu;
+    if (pars.NeutrinoTemperature != 0.) {
+        T_nu = pars.NeutrinoTemperature;
+    } else {
+        T_nu = T_nu_pt;
+    }
     const double T_eV = T_nu * us.kBoltzmann / us.ElectronVolt;
+
 
     /* Initialize the interpolation spline for the perturbation data */
     initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
 
     header(rank, "Simulation parameters");
     message(rank, "We want %lld (%d^3) particles\n", pars.NumPartGenerate, pars.CubeRootNumber);
+    message(rank, "T_nu = %.10f (rel. to perturbation file: %e)\n", T_nu, (T_nu - T_nu_pt)/T_nu_pt);
     message(rank, "a_begin = %.3e (z = %.2f)\n", cosmo.a_begin, 1./cosmo.a_begin - 1);
     message(rank, "a_end = %.3e (z = %.2f)\n", cosmo.a_end, 1./cosmo.a_end - 1);
 

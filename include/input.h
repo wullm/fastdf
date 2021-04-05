@@ -52,6 +52,7 @@ struct params {
     double ScaleFactorBegin;
     double ScaleFactorEnd;
     double ScaleFactorStep;
+    double NeutrinoTemperature; //override the perturb file if desired
 
     /* Output parameters */
     char *OutputDirectory;
