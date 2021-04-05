@@ -152,7 +152,7 @@ int main(int argc, char *argv[]) {
     /* Find the present-day density, as fraction of the critical density */
     const double box_vol = BoxLen * BoxLen * BoxLen;
     const double Omega = ptdat.Omega[ptdat.tau_size * index_src + today_index];
-    const double rho = Omega * cosmo.rho_crit;
+    const double rho = Omega * cosmo.rho_crit * pow(T_nu / T_nu_pt, 3);
     const double particle_mass = rho * box_vol / pars.NumPartGenerate;
 
     header(rank, "Mass factors");
