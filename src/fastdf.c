@@ -151,11 +151,13 @@ int main(int argc, char *argv[]) {
 
     /* Find the present-day density, as fraction of the critical density */
     const double box_vol = BoxLen * BoxLen * BoxLen;
+    const double isen_today = ncdm_isentropic_ratio(1.0, m_eV, T_eV);
     const double Omega = ptdat.Omega[ptdat.tau_size * index_src + today_index];
-    const double rho = Omega * cosmo.rho_crit * pow(T_nu / T_nu_pt, 3);
+    const double rho = Omega * cosmo.rho_crit * pow(T_nu / T_nu_pt, isen_today);
     const double particle_mass = rho * box_vol / pars.NumPartGenerate;
 
     header(rank, "Mass factors");
+    message(rank, "Isentropic ratio today is %f\n", isen_today);
     message(rank, "Neutrino mass is %f eV\n", m_eV);
     message(rank, "Particle mass is %f U_M\n", particle_mass);
 
