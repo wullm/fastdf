@@ -225,7 +225,7 @@ int main(int argc, char *argv[]) {
         /* Apply the transfer function (read only fgrf, output into fbox) */
         fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
         fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_inv_poisson, NULL);
+        fft_apply_kernel(fbox2, fbox2, N, BoxLen, kernel_inv_poisson, NULL);
 
         /* Fourier transform to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
@@ -287,10 +287,13 @@ int main(int argc, char *argv[]) {
         p->v[1] *= 1 + deltaT;
         p->v[2] *= 1 + deltaT;
 
+        /* The current energy */
+        double eps_eV = hypot(p_eV/cosmo.a_end, m_eV);
+
         /* Apply the velocity perturbation */
-        p->v[0] += velnu[0] / c * m_eV;
-        p->v[1] += velnu[1] / c * m_eV;
-        p->v[2] += velnu[2] / c * m_eV;
+        p->v[0] += velnu[0] / c * eps_eV * cosmo.a_end;
+        p->v[1] += velnu[1] / c * eps_eV * cosmo.a_end;
+        p->v[2] += velnu[2] / c * eps_eV * cosmo.a_end;
 
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
