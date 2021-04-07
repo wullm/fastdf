@@ -41,9 +41,9 @@ static inline double hypot3(double x, double y, double z) {
 
 /* Pseudo-random number generator */
 static inline uint64_t splitmix64(uint64_t *state) {
-    uint64_t result = *state;
+    *state += 0x9E3779B97f4A7C15;
 
-    *state = result + 0x9E3779B97f4A7C15;
+    uint64_t result = *state;
     result = (result ^ (result >> 30)) * 0xBF58476D1CE4E5B9;
     result = (result ^ (result >> 27)) * 0x94D049BB133111EB;
     return result ^ (result >> 31);
@@ -117,12 +117,15 @@ static void init_neutrino_particle(uint64_t seed, double m_eV, double *v,
                                    double *x, double *w, double boxlen,
                                    const struct units *us, double T_eV) {
 
+seed = 16777226;
     /* A unique uniform random number for this neutrino */
     const double z = sampleUniform(&seed);
     /* The corresponding initial Fermi-Dirac momentum */
     const double p_eV = fermi_dirac_transform(z) * T_eV;
     /* The corresponding velocity */
     const double u = p_eV;
+
+    printf("%f %f\n", z, p_eV/T_eV);
 
     /* Generate a random point uniformly on the sphere */
     double nx = sampleGaussian(&seed);
