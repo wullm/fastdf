@@ -117,15 +117,12 @@ static void init_neutrino_particle(uint64_t seed, double m_eV, double *v,
                                    double *x, double *w, double boxlen,
                                    const struct units *us, double T_eV) {
 
-seed = 16777226;
     /* A unique uniform random number for this neutrino */
     const double z = sampleUniform(&seed);
     /* The corresponding initial Fermi-Dirac momentum */
     const double p_eV = fermi_dirac_transform(z) * T_eV;
     /* The corresponding velocity */
     const double u = p_eV;
-
-    printf("%f %f\n", z, p_eV/T_eV);
 
     /* Generate a random point uniformly on the sphere */
     double nx = sampleGaussian(&seed);
