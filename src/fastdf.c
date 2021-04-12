@@ -294,14 +294,18 @@ int main(int argc, char *argv[]) {
         /* The local temperature perturbation dT/T */
         double deltaT = dnu/isen_ncdm;
 
-        /* The current unperturbed energy and speed */
+        /* The current unperturbed energy */
         double eps_eV = hypot(p_eV/cosmo.a_end, m_eV);
-        double vmag = hypot3(p->v[0], p->v[1], p->v[2]);
 
-        /* Apply the density and velocity perturbations in one go */
-        p->v[0] *= 1 + deltaT + velnu[0] / c * eps_eV * cosmo.a_end / vmag;
-        p->v[1] *= 1 + deltaT + velnu[1] / c * eps_eV * cosmo.a_end / vmag;
-        p->v[2] *= 1 + deltaT + velnu[2] / c * eps_eV * cosmo.a_end / vmag;
+        /* Apply the density perturbation */
+        p->v[0] *= 1 + deltaT;
+        p->v[1] *= 1 + deltaT;
+        p->v[2] *= 1 + deltaT;
+
+        /* Apply the velocity perturbation */
+        p->v[0] += velnu[0] / c * eps_eV * cosmo.a_end;
+        p->v[1] += velnu[1] / c * eps_eV * cosmo.a_end;
+        p->v[2] += velnu[2] / c * eps_eV * cosmo.a_end;
 
         /* Store initial phase space density */
         p->f_i = f_i;
