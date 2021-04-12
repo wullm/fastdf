@@ -161,6 +161,26 @@ int main(int argc, char *argv[]) {
     message(rank, "Neutrino mass is %f eV\n", m_eV);
     message(rank, "Particle mass is %f U_M\n", particle_mass);
 
+    /* Also determine the average density at the final redshift */
+    double z_end = 1./cosmo.a_end - 1;
+    double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
+    int tau_index; //greatest lower bound bin index
+    double u_tau; //spacing between subsequent bins
+    perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
+
+    /* The indices of the potential transfer function */
+    int index_title = findTitle(ptdat.titles, title, ptdat.n_functions);
+    int index_cdm = findTitle(ptdat.titles, "d_cdm", ptdat.n_functions);
+
+    /* Find the present-day density, as fraction of the critical density */
+    const double Omega_nu = ptdat.Omega[ptdat.tau_size * index_title + tau_index];
+    const double Omega_cdm = ptdat.Omega[ptdat.tau_size * index_cdm + tau_index];
+    const double Omega_nu0 = ptdat.Omega[ptdat.tau_size * index_title + today_index];
+    const double Omega_cdm0 = ptdat.Omega[ptdat.tau_size * index_cdm + today_index];
+    const double pmass_ratio = (Omega_nu / Omega_cdm) / (Omega_nu0 / Omega_cdm0);
+    message(rank, "Average density at z = %f is %e U_M / U_L^3", z_end, particle_mass * pmass_ratio);
+
+
     /* Store the Box Length */
     pars.BoxLen = BoxLen;
 
@@ -194,10 +214,6 @@ int main(int argc, char *argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    double z_end = 1./cosmo.a_end - 1;
-    double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
-
-
     header(rank, "Generating pre-initial conditions");
     message(rank, "Generating pre-initial grids.\n");
 
@@ -208,18 +224,11 @@ int main(int argc, char *argv[]) {
     message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
 
     {
-
-        /* Find the interpolation index along the time dimension */
-        int tau_index; //greatest lower bound bin index
-        double u_tau; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
-
-        /* The indices of the potential transfer function */
-        int index_psi = findTitle(ptdat.titles, title, ptdat.n_functions);
+        /* Index of the energy flux transfer function */
         int index_theta = findTitle(ptdat.titles, "t_ncdm[0]", ptdat.n_functions);
 
         /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
+        struct spline_params sp = {&spline, index_title, tau_index, u_tau};
         struct spline_params sp2 = {&spline, index_theta, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
