@@ -272,6 +272,9 @@ int main(int argc, char *argv[]) {
         if (i==0)
         message(rank, "First random momentum = %e eV\n", p_eV);
 
+        /* Compute the initial phase-space density at the unperturbed point */
+        const double f_i = fermi_dirac_density(p_eV, T_eV);
+
         /* Determine the density perturbation at this point */
         double dnu = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
@@ -282,27 +285,17 @@ int main(int argc, char *argv[]) {
         /* The local temperature perturbation dT/T */
         double deltaT = dnu/isen_ncdm;
 
-        /* Apply the density perturbation */
-        p->v[0] *= 1 + deltaT;
-        p->v[1] *= 1 + deltaT;
-        p->v[2] *= 1 + deltaT;
-
-        /* The current energy */
+        /* The current unperturbed energy and speed */
         double eps_eV = hypot(p_eV/cosmo.a_end, m_eV);
+        double vmag = hypot3(p->v[0], p->v[1], p->v[2]);
 
-        /* Apply the velocity perturbation */
-        p->v[0] += velnu[0] / c * eps_eV * cosmo.a_end;
-        p->v[1] += velnu[1] / c * eps_eV * cosmo.a_end;
-        p->v[2] += velnu[2] / c * eps_eV * cosmo.a_end;
+        /* Apply the density and velocity perturbations in one go */
+        p->v[0] *= 1 + deltaT + velnu[0] / c * eps_eV * cosmo.a_end / vmag;
+        p->v[1] *= 1 + deltaT + velnu[1] / c * eps_eV * cosmo.a_end / vmag;
+        p->v[2] *= 1 + deltaT + velnu[2] / c * eps_eV * cosmo.a_end / vmag;
 
-        const double f_i = fermi_dirac_density(p_eV, T_eV);
-
-        /* Compute initial phase space density */
+        /* Store initial phase space density */
         p->f_i = f_i;
-
-        /* Compute the magnitude of the initial velocity */
-        p->v_i = hypot3(p->v[0], p->v[1], p->v[2]);
-
     }
 
     message(rank, "Done with pre-initial conditions.\n");
