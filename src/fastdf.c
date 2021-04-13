@@ -159,7 +159,7 @@ int main(int argc, char *argv[]) {
     header(rank, "Mass factors");
     message(rank, "Isentropic ratio today is %f\n", isen_today);
     message(rank, "Neutrino mass is %f eV\n", m_eV);
-    message(rank, "Particle mass is %f U_M\n", particle_mass);
+    message(rank, "Particle mass is %.8f U_M\n", particle_mass);
 
     /* Also determine the average density at the final redshift */
     double z_end = 1./cosmo.a_end - 1;
@@ -178,8 +178,8 @@ int main(int argc, char *argv[]) {
     const double Omega_nu0 = ptdat.Omega[ptdat.tau_size * index_title + today_index];
     const double Omega_cdm0 = ptdat.Omega[ptdat.tau_size * index_cdm + today_index];
     const double pmass_ratio = (Omega_nu / Omega_cdm) / (Omega_nu0 / Omega_cdm0);
-    message(rank, "Density at z = %f is %e U_M / U_L^3\n", z_end, rho * pmass_ratio);
-    message(rank, "Density at z = %f is %e U_M / U_L^3\n", 0.0, rho);
+    message(rank, "Density at z = %f is %.8f U_M / U_L^3\n", z_end, rho * pmass_ratio);
+    message(rank, "Density at z = %f is %.8f U_M / U_L^3\n", 0.0, rho);
 
 
     /* Store the Box Length */
