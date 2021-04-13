@@ -178,8 +178,8 @@ int main(int argc, char *argv[]) {
     const double Omega_nu0 = ptdat.Omega[ptdat.tau_size * index_title + today_index];
     const double Omega_cdm0 = ptdat.Omega[ptdat.tau_size * index_cdm + today_index];
     const double pmass_ratio = (Omega_nu / Omega_cdm) / (Omega_nu0 / Omega_cdm0);
-    message(rank, "Average density at z = %f is %e U_M / U_L^3\n", z_end, rho * pmass_ratio);
-    message(rank, "Average density at z = %f is %e U_M / U_L^3\n", 0.0, rho);
+    message(rank, "Density at z = %f is %e U_M / U_L^3\n", z_end, rho * pmass_ratio);
+    message(rank, "Density at z = %f is %e U_M / U_L^3\n", 0.0, rho);
 
 
     /* Store the Box Length */
