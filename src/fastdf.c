@@ -27,6 +27,15 @@
 
 #include "../include/fastdf.h"
 
+double halo_profile(double r, double M, double Rvir, double c){
+    if (r==0.) return 0.;
+
+    double x = r / Rvir;
+    double A = log(1+c) - c/(1.+c);
+    double ic_x = 1./c + x;
+    return M / (4./3. * M_PI * Rvir * Rvir * Rvir) / (3 * A * x * ic_x * ic_x);
+}
+
 int main(int argc, char *argv[]) {
     if (argc == 1) {
         printf("No parameter file specified.\n");
@@ -98,53 +107,21 @@ int main(int argc, char *argv[]) {
     header(rank, "Simulation parameters");
     message(rank, "We want %lld (%d^3) particles\n", pars.NumPartGenerate, pars.CubeRootNumber);
 
-    /* Check if we recognize the output gauge */
-    int gauge_Nbody = 0;
-    if (strcmp(pars.Gauge, "Newtonian") == 0 ||
-        strcmp(pars.Gauge, "newtonian") == 0) {
-        message(rank, "Output gauge: Newtonian\n");
-    } else if (strcmp(pars.Gauge, "N-body") == 0 ||
-               strcmp(pars.Gauge, "n-body") == 0 ||
-               strcmp(pars.Gauge, "nbody") == 0) {
-        message(rank, "Output gauge: N-body\n");
-        gauge_Nbody = 1;
-    } else {
-        message(rank, "Error: unknown output gauge.\n");
-        exit(1);
-    }
-
     message(rank, "a_begin = %.3e (z = %.2f)\n", cosmo.a_begin, 1./cosmo.a_begin - 1);
     message(rank, "a_end = %.3e (z = %.2f)\n", cosmo.a_end, 1./cosmo.a_end - 1);
 
     /* Read the Gaussian random field on each MPI rank */
-    double *box;
-    double BoxLen;
-    int N;
-
-    header(rank, "Random phases");
-    message(rank, "Reading Gaussian random field from %s.\n", pars.GaussianRandomFieldFile);
-
-    readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.GaussianRandomFieldFile);
+    double BoxLen = pars.BoxLen;
+    int N = pars.GridSize;
 
     message(rank, "BoxLen = %.2f U_L\n", BoxLen);
     message(rank, "GridSize = %d\n", N);
 
-    /* Fourier transform the Gaussian random field */
-    fftw_complex *fbox = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_complex *fgrf = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_plan r2c = fftw_plan_dft_r2c_3d(N, N, N, box, fbox, FFTW_ESTIMATE);
-    fft_execute(r2c);
-    fft_normalize_r2c(fbox, N, BoxLen);
-    fftw_destroy_plan(r2c);
-
-    /* Allocate additional boxes */
-    fftw_complex *fbox2 = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_complex *fbox3 = malloc(N*N*N*sizeof(fftw_complex));
+    /* A box for the density grid/potential */
+    double *box = malloc(N*N*N*sizeof(double));
     double *box2 = malloc(N*N*N*sizeof(double));
-    double *box3 = malloc(N*N*N*sizeof(double));
-
-    /* Make a copy of the complex Gaussian random field */
-    memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
+    fftw_complex *fbox = malloc(N*N*N*sizeof(fftw_complex));
+    fftw_complex *fbox2 = malloc(N*N*N*sizeof(fftw_complex));
 
     /* Find the relevant density title among the transfer functions */
     char *title = pars.TransferFunctionDensity;
@@ -203,55 +180,6 @@ int main(int argc, char *argv[]) {
     double z_begin = 1./cosmo.a_begin - 1;
     double log_tau_begin = perturbLogTauAtRedshift(&spline, z_begin);
 
-
-    header(rank, "Generating pre-initial conditions");
-    message(rank, "Generating pre-initial grids.\n");
-    {
-
-        /* Find the interpolation index along the time dimension */
-        int tau_index; //greatest lower bound bin index
-        double u_tau; //spacing between subsequent bins
-        perturbSplineFindTau(&spline, log_tau_begin, &tau_index, &u_tau);
-
-        /* The indices of the potential transfer function */
-        int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
-
-        /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
-
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
-
-        /* Fourier transform to real space */
-        fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
-        fft_execute(c2r);
-        fft_normalize_c2r(box, N, BoxLen);
-        fftw_destroy_plan(c2r);
-
-        /* Retrieve  physical constant */
-        const double c = us.SpeedOfLight;
-
-        /* Copy into the second box for the velocity perturbation */
-        memcpy(box2, box, N*N*N*sizeof(double));
-
-        /* Multiply by the appropriate factor */
-        for (int i=0; i<N*N*N; i++) {
-            box[i] *= -2 / (c * c);
-            box2[i] *= 0.5 * exp(log_tau_begin);
-        }
-
-        if (rank == 0 && pars.OutputFields) {
-            char dnu_fname[50];
-            sprintf(dnu_fname, "%s/ic_dnu.hdf5", pars.OutputDirectory);
-            writeFieldFile(box, N, BoxLen, dnu_fname);
-
-            char tnu_fname[50];
-            sprintf(tnu_fname, "%s/ic_tnu.hdf5", pars.OutputDirectory);
-            writeFieldFile(box2, N, BoxLen, tnu_fname);
-        }
-
-    }
-
     message(rank, "ID of first particle = %lld\n", firstID);
     message(rank, "T_nu = %e eV\n", T_eV);
 
@@ -274,29 +202,6 @@ int main(int argc, char *argv[]) {
         if (i==0)
         message(rank, "First random momentum = %e eV\n", p_eV);
 
-        /* Determine the density perturbation at this point */
-        double dnu = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-
-        /* The local temperature perturbation dT/T */
-        double deltaT = dnu/4;
-
-        /* Determine the initial velocity perturbation at this point */
-        double vel[3];
-        accelCIC(box2, N, BoxLen, p->x, vel);
-
-        /* Apply the perturbation */
-        p->v[0] *= 1 + deltaT;
-        p->v[1] *= 1 + deltaT;
-        p->v[2] *= 1 + deltaT;
-
-        /* The current energy */
-        double eps_eV = hypot(p_eV/cosmo.a_begin, m_eV);
-
-        /* Apply the velocity perturbation */
-        p->v[0] += vel[0] / c * eps_eV * cosmo.a_begin;
-        p->v[1] += vel[1] / c * eps_eV * cosmo.a_begin;
-        p->v[2] += vel[2] / c * eps_eV * cosmo.a_begin;
-
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         /* Compute initial phase space density */
@@ -309,6 +214,28 @@ int main(int argc, char *argv[]) {
         p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
 
     }
+
+    const double N_over_BoxLen = N / BoxLen;
+    const double grid_cell_vol = BoxLen * BoxLen * BoxLen / (N*N*N);
+    const double G_4_PI = 4. * M_PI * us.GravityG;
+    const double r2_soft = 1.0;
+
+    /* Prepare the extremely massive halo particle */
+    const double halo_mass_Gamma = 1.0; //mass accretion rate dlog M/dlog a
+    const double halo_mass = 1e5; //10^15 M_sol at z = 0
+    struct particle_ext halo_particle;
+    struct particle_ext *halo = &halo_particle;
+    halo->x[0] = 0.5 * BoxLen;
+    halo->x[1] = 0.5 * BoxLen;
+    halo->x[2] = 0.5 * BoxLen;
+    halo->v[0] = 0.0;
+    halo->v[1] = 1.0;
+    halo->v[2] = 0.0;
+    halo->mass = 1e5; //10^15 M_sol at z = 0
+
+    /* Halo virial radius and concentration */
+    double Rvir = 1.0;
+    double c_halo = 4.;
 
     message(rank, "Done with pre-initial conditions.\n");
 
@@ -328,7 +255,7 @@ int main(int argc, char *argv[]) {
     /* Start at the beginning */
     double a = a_begin;
 
-    message(rank, "ITER]\t a\t z\t I\n");
+    message(rank, "ITER]\t a\t z\t I\th.x[0]\th.x[1]\th.x[2]\th.v[0]\th.v[1]\th.v[2]\tcom[0]\tcom[1]\tcom[2]\tm_halo\n");
 
     /* The main loop */
     for (int ITER = 0; ITER < MAX_ITER; ITER++) {
@@ -342,8 +269,11 @@ int main(int argc, char *argv[]) {
         }
 
         /* Compute the current redshift and log conformal time */
-        double z = 1./a - 1;
-        double log_tau = perturbLogTauAtRedshift(&spline, z);
+        double z_curr = 1./a - 1;
+        double log_tau = perturbLogTauAtRedshift(&spline, z_curr);
+
+        /* Update the halo mass */
+        halo->mass = halo_mass * pow(a, halo_mass_Gamma);
 
         /* Determine the half-step scale factor */
         double a_half = sqrt(a_next * a);
@@ -357,30 +287,115 @@ int main(int argc, char *argv[]) {
         double dtau2 = exp(log_tau_next) - exp(log_tau_half);
         double dtau = dtau1 + dtau2;
 
-        /* Find the interpolation indices along the time dimension */
-        int tau_idx_curr, tau_idx_half, tau_idx_next;
-        double u_curr, u_half, u_next;
-        perturbSplineFindTau(&spline, log_tau, &tau_idx_curr, &u_curr);
-        perturbSplineFindTau(&spline, log_tau_half, &tau_idx_half, &u_half);
-        perturbSplineFindTau(&spline, log_tau_next, &tau_idx_next, &u_next);
+        /* Reset the grid, locally */
+        memset(box, 0, N * N * N * sizeof(double));
 
-        /* The index of the potential transfer function psi */
-        int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
-        int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
+        /* Perform CIC mass assignment for the local particles */
+        for (int i=0; i<localParticleNumber; i++) {
+            struct particle_ext *p = &genparts[i];
 
-        /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp_psi_curr = {&spline, index_psi, tau_idx_curr, u_curr};
-        struct spline_params sp_phi_curr = {&spline, index_phi, tau_idx_curr, u_curr};
-        struct spline_params sp_phi_half = {&spline, index_phi, tau_idx_half, u_half};
+            double X = p->x[0] * N_over_BoxLen;
+            double Y = p->x[1] * N_over_BoxLen;
+            double Z = p->x[2] * N_over_BoxLen;
 
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp_psi_curr);
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_curr);
-        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_half);
+            int iX = (int) floor(X);
+            int iY = (int) floor(Y);
+            int iZ = (int) floor(Z);
 
-        /* Now fbox = psi(a), fbox2 = phi(a), fbox3 = phi(a_half) */
+            double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
+            double eps_eV = hypot(p_eV/a, m_eV);
+            double eps = particle_mass / m_eV * eps_eV;
+            double f = fermi_dirac_density(p_eV, T_eV);
+            double w = (p->f_i - f)/p->f_i;
+            double mass = eps * w;
 
-        /* Fourier transform to real space */
+            //The search window with respect to the top-left-upper corner
+    		int lookLftX = (int) floor((X-iX) - 1);
+    		int lookRgtX = (int) floor((X-iX) + 1);
+    		int lookLftY = (int) floor((Y-iY) - 1);
+    		int lookRgtY = (int) floor((Y-iY) + 1);
+    		int lookLftZ = (int) floor((Z-iZ) - 1);
+    		int lookRgtZ = (int) floor((Z-iZ) + 1);
+
+    		for (int x=lookLftX; x<=lookRgtX; x++) {
+    			for (int y=lookLftY; y<=lookRgtY; y++) {
+    				for (int z=lookLftZ; z<=lookRgtZ; z++) {
+                        double xx = fabs(X - (iX+x));
+                        double yy = fabs(Y - (iY+y));
+                        double zz = fabs(Z - (iZ+z));
+
+                        double part_x = xx <= 1 ? 1-xx : 0;
+                        double part_y = yy <= 1 ? 1-yy : 0;
+                        double part_z = zz <= 1 ? 1-zz : 0;
+
+                        box[row_major(iX+x, iY+y, iZ+z, N)] += mass/grid_cell_vol * (part_x*part_y*part_z);
+    				}
+    			}
+    		}
+        }
+
+        /* Reduce the grid over all the nodes */
+        MPI_Allreduce(MPI_IN_PLACE, box, N * N * N, MPI_DOUBLE, MPI_SUM,
+                      MPI_COMM_WORLD);
+
+        /* Export the grid on the master rank */
+        if (rank == 0 && pars.OutputFields > 1) {
+            char rho_fname[50];
+            sprintf(rho_fname, "%s/density_%d.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box, N, BoxLen, rho_fname);
+        }
+
+        /* Compute the density due to the spherical halo profile */
+        for (int x=0; x<N; x++) {
+            for (int y=0; y<N; y++) {
+                for (int z=0; z<N; z++) {
+                    /* Compute the distance from the halo CoM */
+                    double X = x / N_over_BoxLen;
+                    double Y = y / N_over_BoxLen;
+                    double Z = z / N_over_BoxLen;
+
+                    double rx = X - halo->x[0];
+                    double ry = Y - halo->x[1];
+                    double rz = Z - halo->x[2];
+                    double r2 = rx * rx + ry * ry + rz * rz;
+                    double r = sqrt(r2);
+
+                    double rho_h = halo_profile(r, halo->mass, Rvir, c_halo);
+
+                    box2[row_major(x, y, z, N)] = a * rho_h;
+                }
+            }
+        }
+
+        // /* Export the grid on the master rank */
+        // if (rank == 0 && pars.OutputFields > 1) {
+        //     char rho_fname[50];
+        //     sprintf(rho_fname, "%s/density_wh_%d.hdf5", pars.OutputDirectory, ITER);
+        //     writeFieldFile(box, N, BoxLen, rho_fname);
+        // }
+
+        /* Multiply by the appropriate factor */
+        for (int i=0; i<N*N*N; i++) {
+            box[i] *= G_4_PI;
+            box2[i] *= G_4_PI;
+        }
+
+        /* Fourier transform to complex space */
+        fftw_plan r2c = fftw_plan_dft_r2c_3d(N, N, N, box, fbox, FFTW_ESTIMATE);
+        fft_execute(r2c);
+        fft_normalize_r2c(fbox, N, BoxLen);
+        fftw_destroy_plan(r2c);
+
+        fftw_plan r2c2 = fftw_plan_dft_r2c_3d(N, N, N, box2, fbox2, FFTW_ESTIMATE);
+        fft_execute(r2c2);
+        fft_normalize_r2c(fbox, N, BoxLen);
+        fftw_destroy_plan(r2c2);
+
+        /* Apply inverse Poisson kernel */
+        fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
+        fft_apply_kernel(fbox2, fbox2, N, BoxLen, kernel_inv_poisson, NULL);
+
+        /* Fourier transform back to real space */
         fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
         fft_execute(c2r);
         fft_normalize_c2r(box, N, BoxLen);
@@ -391,80 +406,52 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box2, N, BoxLen);
         fftw_destroy_plan(c2r2);
 
-        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box3, FFTW_ESTIMATE);
-        fft_execute(c2r3);
-        fft_normalize_c2r(box3, N, BoxLen);
-        fftw_destroy_plan(c2r3);
-
-        if (rank == 0 && pars.OutputFields > 1) {
-            char psi_fname[50];
-            sprintf(psi_fname, "%s/psi_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box, N, BoxLen, psi_fname);
-
-            char phi_fname[50];
-            sprintf(phi_fname, "%s/phi_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box2, N, BoxLen, phi_fname);
-
-            char phi_fname_b[50];
-            sprintf(phi_fname_b, "%s/phi_%db.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box3, N, BoxLen, phi_fname_b);
+        /* Add the contribution from neutrinos to that of the halo */
+        for (int i=0; i<N*N*N; i++) {
+            box2[i] += box[i];
         }
+
+        // /* Export the grid on the master rank */
+        // if (rank == 0 && pars.OutputFields > 1) {
+        //     char rho_fname[50];
+        //     sprintf(rho_fname, "%s/potential_%d.hdf5", pars.OutputDirectory, ITER);
+        //     writeFieldFile(box, N, BoxLen, rho_fname);
+        // }
 
         /* Integrate the particles */
         #pragma omp parallel for
         for (int i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
-            /* Get the acceleration from the scalar potential psi */
+            /* Get the acceleration from the potential */
             double acc[3];
-            accelCIC(box, N, BoxLen, p->x, acc);
-
-            /* Get the acceleration from the scalar potential phi */
-            double acc_phi[3];
-            accelCIC(box2, N, BoxLen, p->x, acc_phi);
-
-            /* Also fetch the value of the potential at the particle position */
-            double psi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double psi_c2 = psi / (c * c);
-            double phi_c2 = phi / (c * c);
-
-            /* Also compute the time derivative of phi using finite difference */
-            double phi_half = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_dot = (phi_half - phi) / dtau1;
-            double phi_dot_c2 = phi_dot / (c * c);
-
-            /* Inner product of v_i with acc_phi */
-            double vacx = p->v_i[0] * acc_phi[0];
-            double vacy = p->v_i[1] * acc_phi[1];
-            double vacz = p->v_i[2] * acc_phi[2];
-            double vac = vacx + vacy + vacz;
+            accelCIC(box2, N, BoxLen, p->x, acc);
 
             /* Fetch the relativistic correction factors */
             double q = p->v_i_mag;
-            double q2 = q * q;
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1. / epsfac;
 
             /* Compute kick and drift factors */
-            double kick_psi = epsfac / c;
-            double kick_phi = epsfac_inv / c;
-            double drift = epsfac_inv * (1.0 + psi_c2 + phi_c2) * c;
+            double kick = epsfac / c;
+            double drift = epsfac_inv * c;
 
-            /* Execute first gradient term */
-            p->v[0] -= acc[0] * kick_psi * dtau1;
-            p->v[1] -= acc[1] * kick_psi * dtau1;
-            p->v[2] -= acc[2] * kick_psi * dtau1;
+            /* Compute the exact force due to the halo */
+            double dx = p->x[0] - halo->x[0];
+            double dy = p->x[1] - halo->x[1];
+            double dz = p->x[2] - halo->x[2];
+            double r2 = dx * dx + dy * dy + dz * dz;
+            double r3_inv = 1. / ((r2 + r2_soft) * sqrt(r2));
 
-            /* Add anti-symmetric gradient term (only rotates) */
-            p->v[0] -= (q2 * acc_phi[0] - p->v_i[0] * vac) * kick_phi * dtau1;
-            p->v[1] -= (q2 * acc_phi[1] - p->v_i[1] * vac) * kick_phi * dtau1;
-            p->v[2] -= (q2 * acc_phi[2] - p->v_i[2] * vac) * kick_phi * dtau1;
+            /* Execute the kick from the neutrinos */
+            p->v[0] -= acc[0] * kick * dtau1;
+            p->v[1] -= acc[1] * kick * dtau1;
+            p->v[2] -= acc[2] * kick * dtau1;
 
-            /* Add potential derivative term */
-            p->v[0] += p->v_i[0] * phi_dot_c2 * dtau1;
-            p->v[1] += p->v_i[1] * phi_dot_c2 * dtau1;
-            p->v[2] += p->v_i[2] * phi_dot_c2 * dtau1;
+            /* Execute the kick from the halo */
+            // p->v[0] -= halo->mass * us.GravityG * r3_inv * kick * dtau1 * dx;
+            // p->v[1] -= halo->mass * us.GravityG * r3_inv * kick * dtau1 * dy;
+            // p->v[2] -= halo->mass * us.GravityG * r3_inv * kick * dtau1 * dz;
 
             /* Execute drift (only one drift, so use dtau = dtau1 + dtau2) */
             p->x[0] += p->v[0] * drift * dtau;
@@ -472,19 +459,202 @@ int main(int argc, char *argv[]) {
             p->x[2] += p->v[2] * drift * dtau;
         }
 
+        /* Move the halo */
+        {
+            /* Get the acceleration from the potential using box (just nu's) */
+            double acc[3];
+            accelCIC(box, N, BoxLen, halo->x, acc);
+
+            /* Execute the kick from the neutrinos */
+            halo->v[0] -= acc[0] * dtau1;
+            halo->v[1] -= acc[1] * dtau1;
+            halo->v[2] -= acc[2] * dtau1;
+
+            /* Execute drift (only one drift, so use dtau = dtau1 + dtau2) */
+            halo->x[0] += halo->v[0] * dtau;
+            halo->x[1] += halo->v[1] * dtau;
+            halo->x[2] += halo->v[2] * dtau;
+        }
+
         /* Next, we will compute the potential at the half-step time */
 
-        /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp_psi_half = {&spline, index_psi, tau_idx_half, u_half};
-        struct spline_params sp_phi_next = {&spline, index_phi, tau_idx_next, u_next};
+        /* Update the halo mass */
+        halo->mass = halo_mass * pow(a_half, halo_mass_Gamma);
 
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp_psi_half);
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_next);
+        /* Reset the grid, locally */
+        memset(box, 0, N * N * N * sizeof(double));
 
-        /* Now fbox = psi(a_half), fbox2 = phi(a_next), fbox3 = phi(a_half) */
+        /* Perform CIC mass assignment for the local particles */
+        for (int i=0; i<localParticleNumber; i++) {
+            struct particle_ext *p = &genparts[i];
 
-        /* Fourier transform to real space */
+            double X = p->x[0] * N_over_BoxLen;
+            double Y = p->x[1] * N_over_BoxLen;
+            double Z = p->x[2] * N_over_BoxLen;
+
+            int iX = (int) floor(X);
+            int iY = (int) floor(Y);
+            int iZ = (int) floor(Z);
+
+            double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
+            double eps_eV = hypot(p_eV/a, m_eV);
+            double eps = particle_mass / m_eV * eps_eV;
+            double f = fermi_dirac_density(p_eV, T_eV);
+            double w = (p->f_i - f)/p->f_i;
+            double mass = eps * w;
+
+            //The search window with respect to the top-left-upper corner
+    		int lookLftX = (int) floor((X-iX) - 1);
+    		int lookRgtX = (int) floor((X-iX) + 1);
+    		int lookLftY = (int) floor((Y-iY) - 1);
+    		int lookRgtY = (int) floor((Y-iY) + 1);
+    		int lookLftZ = (int) floor((Z-iZ) - 1);
+    		int lookRgtZ = (int) floor((Z-iZ) + 1);
+
+    		for (int x=lookLftX; x<=lookRgtX; x++) {
+    			for (int y=lookLftY; y<=lookRgtY; y++) {
+    				for (int z=lookLftZ; z<=lookRgtZ; z++) {
+                        double xx = fabs(X - (iX+x));
+                        double yy = fabs(Y - (iY+y));
+                        double zz = fabs(Z - (iZ+z));
+
+                        double part_x = xx <= 1 ? 1-xx : 0;
+                        double part_y = yy <= 1 ? 1-yy : 0;
+                        double part_z = zz <= 1 ? 1-zz : 0;
+
+                        box[row_major(iX+x, iY+y, iZ+z, N)] += mass/grid_cell_vol * (part_x*part_y*part_z);
+    				}
+    			}
+    		}
+        }
+
+        /* Reduce the grid over all the nodes */
+        MPI_Allreduce(MPI_IN_PLACE, box, N * N * N, MPI_DOUBLE, MPI_SUM,
+                      MPI_COMM_WORLD);
+
+        // /* Export the grid on the master rank */
+        // if (rank == 0 && pars.OutputFields > 1) {
+        //     char rho_fname[50];
+        //     sprintf(rho_fname, "%s/density_%db.hdf5", pars.OutputDirectory, ITER);
+        //     writeFieldFile(box, N, BoxLen, rho_fname);
+        // }
+
+        /* Compute the density due to the spherical halo profile */
+        for (int x=0; x<N; x++) {
+            for (int y=0; y<N; y++) {
+                for (int z=0; z<N; z++) {
+                    /* Compute the distance from the halo CoM */
+                    double X = x / N_over_BoxLen;
+                    double Y = y / N_over_BoxLen;
+                    double Z = z / N_over_BoxLen;
+
+                    double rx = X - halo->x[0];
+                    double ry = Y - halo->x[1];
+                    double rz = Z - halo->x[2];
+                    double r2 = rx * rx + ry * ry + rz * rz;
+                    double r = sqrt(r2);
+
+                    double rho_h = halo_profile(r, halo->mass, Rvir, c_halo);
+
+                    box2[row_major(x, y, z, N)] += a * rho_h;
+                }
+            }
+        }
+
+        // /* Determine two vectors orthogonal to the motion of the halo */
+        // double hvx = halo->v[0];
+        // double hvy = halo->v[1];
+        // double hvz = halo->v[2];
+        //
+        // double nx, ny, nz;
+        // if (hvy == 0 && hvz == 0)  {
+        //     nx = hvz;
+        //     ny = 0;
+        //     nz = -hvx;
+        // } else {
+        //     nx = 0;
+        //     ny = -hvz;
+        //     nz = hvy;
+        // }
+        // double mx = ny * hvz - nz * hvy;
+        // double my = nz * hvx - nx * hvz;
+        // double mz = nx * hvy - ny * hvx;
+        //
+        // /* And normalize */
+        // double hvmag = hypot3(hvx, hvy, hvz);
+        // double nmag = hypot3(nx, ny, nz);
+        // double mmag = hypot3(mx, my, mz);
+        // nx *= hvmag / nmag;
+        // ny *= hvmag / nmag;
+        // nz *= hvmag / nmag;
+        // mx *= hvmag / mmag;
+        // my *= hvmag / mmag;
+        // mz *= hvmag / mmag;
+        //
+        // /* Determine the density difference in all three directions */
+        // double x = halo->x[0];
+        // double y = halo->x[1];
+        // double z = halo->x[2];
+        // double v_drho = gridCIC(box, N, BoxLen, x + hvx, y + hvy, z + hvz) -
+        //                 gridCIC(box, N, BoxLen, x - hvx, y - hvy, z - hvz);
+        // double n_drho = gridCIC(box, N, BoxLen, x + nx, y + ny, z + nz) -
+        //                 gridCIC(box, N, BoxLen, x - nx, y - ny, z - nz);
+        // double m_drho = gridCIC(box, N, BoxLen, x + mx, y + my, z + mz) -
+        //                 gridCIC(box, N, BoxLen, x - mx, y - my, z - mz);
+
+
+        /* Compute the centre of absolute mass of the neutrinos */
+        double mxxisum = 0, mxzesum = 0, myxisum = 0, myzesum = 0,
+               mzxisum = 0, mzzesum = 0, msum = 0;
+        for (int x=0; x<N; x++) {
+            for (int y=0; y<N; y++) {
+                for (int z=0; z<N; z++) {
+                    double m = fabs(box[row_major(x, y, z, N)]);
+                    mxxisum += m * cos(x * 2. * M_PI / N);
+                    mxzesum += m * sin(x * 2. * M_PI / N);
+                    myxisum += m * cos(y * 2. * M_PI / N);
+                    myzesum += m * sin(y * 2. * M_PI / N);
+                    mzxisum += m * cos(z * 2. * M_PI / N);
+                    mzzesum += m * sin(z * 2. * M_PI / N);
+                    msum += m;
+                }
+            }
+        }
+        double comxxi = mxxisum / msum;
+        double comxze = mxzesum / msum;
+        double comyxi = myxisum / msum;
+        double comyze = myzesum / msum;
+        double comzxi = mzxisum / msum;
+        double comzze = mzzesum / msum;
+        double comx = (atan2(-comxze, -comxxi) + M_PI) / (2. * M_PI) * BoxLen;
+        double comy = (atan2(-comyze, -comyxi) + M_PI) / (2. * M_PI) * BoxLen;
+        double comz = (atan2(-comzze, -comzxi) + M_PI) / (2. * M_PI) * BoxLen;
+        // double comx = mxsum / msum / N_over_BoxLen;
+        // double comy = mysum / msum / N_over_BoxLen;
+        // double comz = mzsum / msum / N_over_BoxLen;
+
+        /* Multiply by the appropriate factor */
+        for (int i=0; i<N*N*N; i++) {
+            box[i] *= G_4_PI;
+            box2[i] *= G_4_PI;
+        }
+
+        /* Fourier transform to complex space */
+        r2c = fftw_plan_dft_r2c_3d(N, N, N, box, fbox, FFTW_ESTIMATE);
+        fft_execute(r2c);
+        fft_normalize_r2c(fbox, N, BoxLen);
+        fftw_destroy_plan(r2c);
+
+        r2c2 = fftw_plan_dft_r2c_3d(N, N, N, box2, fbox2, FFTW_ESTIMATE);
+        fft_execute(r2c2);
+        fft_normalize_r2c(fbox2, N, BoxLen);
+        fftw_destroy_plan(r2c2);
+
+        /* Apply inverse Poisson kernel */
+        fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
+        fft_apply_kernel(fbox2, fbox2, N, BoxLen, kernel_inv_poisson, NULL);
+
+        /* Fourier transform back to real space */
         c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
         fft_execute(c2r);
         fft_normalize_c2r(box, N, BoxLen);
@@ -495,15 +665,18 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box2, N, BoxLen);
         fftw_destroy_plan(c2r2);
 
-        if (rank == 0 && pars.OutputFields > 1) {
-            char psi_fname[50];
-            sprintf(psi_fname, "%s/psi_%db.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box, N, BoxLen, psi_fname);
-
-            char phi_fname[50];
-            sprintf(phi_fname, "%s/phi_%dc.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box2, N, BoxLen, phi_fname);
+        /* Add the contribution from neutrinos to that of the halo */
+        for (int i=0; i<N*N*N; i++) {
+            box2[i] += box[i];
         }
+
+        // /* Export the grid on the master rank */
+        // if (rank == 0 && pars.OutputFields > 1) {
+        //     char rho_fname[50];
+        //     sprintf(rho_fname, "%s/potential_%db.hdf5", pars.OutputDirectory, ITER);
+        //     writeFieldFile(box, N, BoxLen, rho_fname);
+        // }
+
 
         /* Integrate the particles during the second half-step */
         #pragma omp parallel for
@@ -512,48 +685,43 @@ int main(int argc, char *argv[]) {
 
             /* Get the acceleration from the scalar potential psi */
             double acc[3];
-            accelCIC(box, N, BoxLen, p->x, acc);
-
-            /* Get the acceleration from the scalar potential phi */
-            double acc_phi[3];
-            accelCIC(box2, N, BoxLen, p->x, acc_phi);
-
-            /* Also compute the time derivative of phi using finite difference */
-            double phi_half = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_next = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_dot = (phi_next - phi_half) / dtau2;
-            double phi_dot_c2 = phi_dot / (c * c);
-
-            /* Inner product of v_i with acc_phi */
-            double vacx = p->v_i[0] * acc_phi[0];
-            double vacy = p->v_i[1] * acc_phi[1];
-            double vacz = p->v_i[2] * acc_phi[2];
-            double vac = vacx + vacy + vacz;
+            accelCIC(box2, N, BoxLen, p->x, acc);
 
             /* Fetch the relativistic correction factors */
             double q = p->v_i_mag;
-            double q2 = q * q;
             double epsfac = hypot(q, a * m_eV);
-            double epsfac_inv = 1. / epsfac;
+
+            /* Compute the exact force due to the halo */
+            double dx = p->x[0] - halo->x[0];
+            double dy = p->x[1] - halo->x[1];
+            double dz = p->x[2] - halo->x[2];
+            double r2 = dx * dx + dy * dy + dz * dz;
+            double r3_inv = 1. / ((r2 + r2_soft) * sqrt(r2));
 
             /* Compute kick factors */
-            double kick_psi = epsfac / c;
-            double kick_phi = epsfac_inv / c;
+            double kick = epsfac / c;
 
-            /* Execute first gradient term */
-            p->v[0] -= acc[0] * kick_psi * dtau2;
-            p->v[1] -= acc[1] * kick_psi * dtau2;
-            p->v[2] -= acc[2] * kick_psi * dtau2;
+            /* Execute the kick from the neutrinos */
+            p->v[0] -= acc[0] * kick * dtau2;
+            p->v[1] -= acc[1] * kick * dtau2;
+            p->v[2] -= acc[2] * kick * dtau2;
 
-            /* Add anti-symmetric gradient term (only rotates) */
-            p->v[0] -= (q2 * acc_phi[0] - p->v_i[0] * vac) * kick_phi * dtau2;
-            p->v[1] -= (q2 * acc_phi[1] - p->v_i[1] * vac) * kick_phi * dtau2;
-            p->v[2] -= (q2 * acc_phi[2] - p->v_i[2] * vac) * kick_phi * dtau2;
+            /* Execute the kick from the halo */
+            // p->v[0] -= halo->mass * us.GravityG * r3_inv * kick * dtau2 * dx;
+            // p->v[1] -= halo->mass * us.GravityG * r3_inv * kick * dtau2 * dy;
+            // p->v[2] -= halo->mass * us.GravityG * r3_inv * kick * dtau2 * dz;
+        }
 
-            /* Add potential derivative term */
-            p->v[0] += p->v_i[0] * phi_dot_c2 * dtau2;
-            p->v[1] += p->v_i[1] * phi_dot_c2 * dtau2;
-            p->v[2] += p->v_i[2] * phi_dot_c2 * dtau2;
+        /* Move the halo */
+        {
+            /* Get the acceleration from the potential using box (just nu's) */
+            double acc[3];
+            accelCIC(box, N, BoxLen, halo->x, acc);
+
+            /* Execute the kick from the neutrinos */
+            halo->v[0] -= acc[0] * dtau2;
+            halo->v[1] -= acc[1] * dtau2;
+            halo->v[2] -= acc[2] * dtau2;
         }
 
         /* Step forward */
@@ -579,160 +747,7 @@ int main(int argc, char *argv[]) {
             /* Compute summary statistic */
             I_df *= 0.5 / pars.NumPartGenerate * weight_compute_invfreq;
 
-            message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
-        }
-    }
-
-    if (gauge_Nbody) {
-
-        header(rank, "Generating N-body gauge transformation grid");
-
-        /* Compute the isentropic ratio and equation of state at a_end */
-        const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
-        const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
-        message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, cosmo.a_end);
-        message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
-
-        {
-            /* Final time at which to execute the gauge transformation */
-            double z_end = 1./cosmo.a_end - 1;
-            double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
-
-            double a2 = cosmo.a_end * 1.001;
-            double z2 =  1./a2 - 1;
-            double log_tau2 = perturbLogTauAtRedshift(&spline, z2);
-
-            /* Find the interpolation index along the time dimension */
-            int tau_index; //greatest lower bound bin index
-            double u_tau; //spacing between subsequent bins
-            perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
-
-            /* The indices of the potential transfer function */
-            int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
-            int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
-            int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
-            int index_ncdm = findTitle(ptdat.titles, title, ptdat.n_functions);
-            int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
-
-            /* Package the perturbation theory interpolation spline parameters */
-            struct spline_params sp = {&spline, index_hdot, tau_index, u_tau};
-            struct spline_params sp2 = {&spline, index_etadot, tau_index, u_tau};
-            struct spline_params sp3 = {&spline, index_Nbshift, tau_index, u_tau};
-            struct spline_params sp4 = {&spline, index_HTNbp, tau_index, u_tau};
-
-            /* Apply the transfer function (read only fgrf, output into fbox) */
-            fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
-            fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
-            fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
-
-            /* Compute alpha * k^2 = h_dot + 6 * eta_dot */
-            for (int i=0; i<N*N*(N/2+1); i++) {
-                fbox[i] += 6 * fbox2[i];
-            }
-
-            /* Apply the inverse Poisson kernel -1/k^2 */
-            fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
-
-            /* Fourier transform to real space */
-            fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
-            fft_execute(c2r);
-            fft_normalize_c2r(box, N, BoxLen);
-            fftw_destroy_plan(c2r);
-
-            fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
-            fft_execute(c2r2);
-            fft_normalize_c2r(box2, N, BoxLen);
-            fftw_destroy_plan(c2r2);
-
-            /* Compute the conformatl time derivative of the background density */
-            double Omega_nu1 = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
-            double Omega_nu2 = perturbDensityAtLogTau(&spline, log_tau2, index_ncdm);
-
-            double H1 = perturbHubbleAtLogTau(&spline, log_tau_end);
-            double H2 = perturbHubbleAtLogTau(&spline, log_tau2);
-
-            double H_0 = cosmo.H_0;
-            double rho_crit1 = cosmo.rho_crit * (H1 * H1) / (H_0 * H_0);
-            double rho_crit2 = cosmo.rho_crit * (H2 * H2) / (H_0 * H_0);
-
-            double rho_nu1 = Omega_nu1 * rho_crit1;
-            double rho_nu2 = Omega_nu2 * rho_crit2;
-
-            double dtau = exp(log_tau2) - exp(log_tau_end);
-            double rho_dot = (rho_nu2 - rho_nu1) / dtau;
-            double rho_dot_rho = rho_dot / rho_nu1;
-
-            /* Multiply by the appropriate factor */
-            for (int i=0; i<N*N*N; i++) {
-                box[i] *= -0.5 * rho_dot_rho / (c * c * c * c);
-                box2[i] *= 1 + w_ncdm;
-            }
-
-            if (rank == 0 && pars.OutputFields) {
-                char alpha_fname[50];
-                sprintf(alpha_fname, "%s/gauge_alpha.hdf5", pars.OutputDirectory);
-                writeFieldFile(box, N, BoxLen, alpha_fname);
-
-                char Nbshift_fname[50];
-                sprintf(Nbshift_fname, "%s/gauge_Nbshift.hdf5", pars.OutputDirectory);
-                writeFieldFile(box2, N, BoxLen, Nbshift_fname);
-            }
-
-            /* Add the N-body gauge shift to the overall gauge shift */
-            for (int i=0; i<N*N*N; i++) {
-                box[i] -= box2[i];
-            }
-
-            /* Apply the transfer function for H_T_Nb_prime */
-            fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
-
-            /* Apply the inverse Poisson kernel -1/k^2 */
-            fft_apply_kernel(fbox3, fbox3, N, BoxLen, kernel_inv_poisson, NULL);
-
-            /* Fourier transform to real space */
-            fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
-            fft_execute(c2r3);
-            fft_normalize_c2r(box2, N, BoxLen);
-            fftw_destroy_plan(c2r3);
-
-            if (rank == 0 && pars.OutputFields) {
-                char vshift_fname[50];
-                sprintf(vshift_fname, "%s/gauge_vshift.hdf5", pars.OutputDirectory);
-                writeFieldFile(box2, N, BoxLen, vshift_fname);
-            }
-
-        }
-
-        message(rank, "Applying N-body gauge transformation to the particles.\n");
-
-        /* Perform the gauge transformation */
-        #pragma omp parallel for
-        for (int i=0; i<localParticleNumber; i++) {
-            struct particle_ext *p = &genparts[i];
-
-            /* Determine the gauge shift at this point */
-            double delta = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-
-            /* The equivalent temperature perturbation dT/T */
-            double deltaT = delta/isen_ncdm;
-
-            /* Determine the velocity shift at this point */
-            double vel[3];
-            accelCIC(box2, N, BoxLen, p->x, vel);
-
-            /* Apply the density shift */
-            p->v[0] *= 1 - deltaT;
-            p->v[1] *= 1 - deltaT;
-            p->v[2] *= 1 - deltaT;
-
-            /* The current energy */
-            double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
-            double eps_eV = hypot(p_eV/a_end, m_eV);
-
-            /* Apply the velocity shift */
-            p->v[0] += vel[0] / c * eps_eV * cosmo.a_end;
-            p->v[1] += vel[1] / c * eps_eV * cosmo.a_end;
-            p->v[2] += vel[2] / c * eps_eV * cosmo.a_end;
+            message(rank, "%04d] %.2e %.2e %e %.3f %.3f %.3f %f %f %f %.3f %.3f %.3f %e\n", ITER, a, 1./a-1, I_df, halo->x[0], halo->x[1], halo->x[2], halo->v[0], halo->v[1], halo->v[2], comx, comy, comz, halo->mass);
         }
     }
 
@@ -767,12 +782,9 @@ int main(int argc, char *argv[]) {
 
     /* Free memory */
     free(box);
-    free(fgrf);
     free(fbox);
     free(fbox2);
-    free(fbox3);
     free(box2);
-    free(box3);
 
     header(rank, "Prepare output");
 

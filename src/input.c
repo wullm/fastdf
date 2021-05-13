@@ -30,6 +30,8 @@ int readParams(struct params *pars, const char *fname) {
      /* Desired particle numbers */
      pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname);
      pars->NumPartGenerate = pars->CubeRootNumber * pars->CubeRootNumber * pars->CubeRootNumber;
+     pars->GridSize = ini_getl("Box", "GridSize", 64, fname);
+     pars->BoxLen = ini_getd("Box", "BoxLen", 64.0, fname);
 
      pars->ScaleFactorBegin = ini_getd("Simulation", "ScaleFactorBegin", 0.005, fname);
      pars->ScaleFactorEnd = ini_getd("Simulation", "ScaleFactorEnd", 0.01, fname);
