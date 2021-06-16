@@ -757,7 +757,7 @@ int main(int argc, char *argv[]) {
             }
 
             /* Apply the inverse Poisson kernel -1/k^2 */
-            fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
+            fft_apply_kernel(fbox_alpha, fbox_alpha, N, BoxLen, kernel_inv_poisson, NULL);
 
             /* Free grids that are no longer needed */
             free(fbox_hdot);
