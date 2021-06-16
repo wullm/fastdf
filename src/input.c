@@ -34,6 +34,8 @@ int readParams(struct params *pars, const char *fname) {
      pars->ScaleFactorBegin = ini_getd("Simulation", "ScaleFactorBegin", 0.005, fname);
      pars->ScaleFactorEnd = ini_getd("Simulation", "ScaleFactorEnd", 0.01, fname);
      pars->ScaleFactorStep = ini_getd("Simulation", "ScaleFactorStep", 0.05, fname);
+     pars->RecomputeTrigger = ini_getd("Simulation", "RecomputeTrigger", 0.01, fname);
+     pars->RecomputeScaleRef = ini_getd("Simulation", "RecomputeScaleRef", 1.0, fname);
 
      pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
 
@@ -89,6 +91,7 @@ int readUnits(struct units *us, const char *fname) {
 int cleanParams(struct params *pars) {
     free(pars->OutputDirectory);
     free(pars->Name);
+    free(pars->ExportName);
     free(pars->OutputFilename);
     free(pars->PerturbFile);
     free(pars->GaussianRandomFieldFile);

@@ -83,7 +83,7 @@ static inline double sampleGaussian(uint64_t *state) {
  * @param m_eV Neutrino mass in electronvolts
  * @param c Speed of light
  */
-static inline double fermi_dirac_momentum(double *v, double m_eV, double c) {
+static inline double fermi_dirac_momentum(double v[3], double m_eV, double c) {
     const double u = hypot3(v[0], v[1], v[2]);
     const double p_eV = u;
 
@@ -113,8 +113,8 @@ static inline double fermi_dirac_density(double p_eV, double T_eV) {
  * @param boxlen Comoving physical sidelength of the box
  * @param us Container of units physical constants
  */
-static void init_neutrino_particle(uint64_t seed, double m_eV, double *v,
-                                   double *x, double *w, double boxlen,
+static void init_neutrino_particle(uint64_t seed, double m_eV, double v[3],
+                                   double x[3], double *w, double boxlen,
                                    const struct units *us, double T_eV) {
 
     /* A unique uniform random number for this neutrino */

@@ -92,6 +92,11 @@ int main(int argc, char *argv[]) {
     const double T_nu = ptpars.T_ncdm[0] * ptpars.T_CMB;
     const double T_eV = T_nu * us.kBoltzmann / us.ElectronVolt;
 
+    /* Retrieve further physical constant */
+    const double c = us.SpeedOfLight;
+    const double inv_c = 1.0 / c;
+    const double inv_c2 = inv_c * inv_c;
+
     /* Initialize the interpolation spline for the perturbation data */
     initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
 
@@ -109,7 +114,7 @@ int main(int argc, char *argv[]) {
         message(rank, "Output gauge: N-body\n");
         gauge_Nbody = 1;
     } else {
-        message(rank, "Error: unknown output gauge.\n");
+        message(rank, "Error: unknown output gauge '%s'.\n", pars.Gauge);
         exit(1);
     }
 
@@ -137,12 +142,6 @@ int main(int argc, char *argv[]) {
     fft_normalize_r2c(fbox, N, BoxLen);
     fftw_destroy_plan(r2c);
 
-    /* Allocate additional boxes */
-    fftw_complex *fbox2 = malloc(N*N*N*sizeof(fftw_complex));
-    fftw_complex *fbox3 = malloc(N*N*N*sizeof(fftw_complex));
-    double *box2 = malloc(N*N*N*sizeof(double));
-    double *box3 = malloc(N*N*N*sizeof(double));
-
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
 
@@ -154,7 +153,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    /* The index of the present-day, corresponds to the last index in the array */
+    /* The index of the present day, corresponds to the last index in the array */
     int today_index = ptdat.tau_size - 1;
 
     /* Find the present-day density, as fraction of the critical density */
@@ -173,7 +172,7 @@ int main(int argc, char *argv[]) {
     /* Determine the number of particle to be generated on each rank */
     header(rank, "Particle distribution");
 
-    /* The particles are also generated from a grid with dimension M^3 */
+    /* The particle number is M^3 */
     int M = pars.CubeRootNumber;
 
     /* Determine what particles belong to this slice */
@@ -192,8 +191,8 @@ int main(int argc, char *argv[]) {
     printf("%03d: Local particles [%04d, %04d], first = %lld, last = %lld, total = %lld\n", rank, X_min, X_max, localFirstNumber, localFirstNumber + localParticleNumber - 1, totalParticlesAssigned);
 
     /* The particles to be generated on this node */
-    struct particle_ext *genparts = malloc(sizeof(struct particle_ext) *
-                                    localParticleNumber);
+    struct particle_ext *genparts = calloc(localParticleNumber,
+                                           sizeof(struct particle_ext));
 
     /* ID of the first particle on this node */
     long long firstID = pars.FirstID + localFirstNumber;
@@ -202,6 +201,10 @@ int main(int argc, char *argv[]) {
 
     double z_begin = 1./cosmo.a_begin - 1;
     double log_tau_begin = perturbLogTauAtRedshift(&spline, z_begin);
+
+    /* Allocate boxes for the initial conditions */
+    double *box_dic = malloc(N*N*N*sizeof(double));
+    double *box_tic = malloc(N*N*N*sizeof(double));
 
 
     header(rank, "Generating pre-initial conditions");
@@ -215,6 +218,10 @@ int main(int argc, char *argv[]) {
 
         /* The indices of the potential transfer function */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
+        if (index_psi < 0) {
+            message(rank, "Error: transfer function '%s' not found (%d).\n", "psi", index_psi);
+            return 1;
+        }
 
         /* Package the perturbation theory interpolation spline parameters */
         struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
@@ -228,35 +235,30 @@ int main(int argc, char *argv[]) {
         fft_normalize_c2r(box, N, BoxLen);
         fftw_destroy_plan(c2r);
 
-        /* Retrieve  physical constant */
-        const double c = us.SpeedOfLight;
-
-        /* Copy into the second box for the velocity perturbation */
-        memcpy(box2, box, N*N*N*sizeof(double));
+        /* Copy into the boxes for the density and velocity perturbations */
+        memcpy(box_dic, box, N*N*N*sizeof(double));
+        memcpy(box_tic, box, N*N*N*sizeof(double));
 
         /* Multiply by the appropriate factor */
         for (int i=0; i<N*N*N; i++) {
-            box[i] *= -2 / (c * c);
-            box2[i] *= 0.5 * exp(log_tau_begin);
+            box_dic[i] *= -2 * inv_c2;
+            box_tic[i] *= 0.5 * exp(log_tau_begin);
         }
 
         if (rank == 0 && pars.OutputFields) {
             char dnu_fname[50];
             sprintf(dnu_fname, "%s/ic_dnu.hdf5", pars.OutputDirectory);
-            writeFieldFile(box, N, BoxLen, dnu_fname);
+            writeFieldFile(box_dic, N, BoxLen, dnu_fname);
 
             char tnu_fname[50];
             sprintf(tnu_fname, "%s/ic_tnu.hdf5", pars.OutputDirectory);
-            writeFieldFile(box2, N, BoxLen, tnu_fname);
+            writeFieldFile(box_tic, N, BoxLen, tnu_fname);
         }
 
     }
 
     message(rank, "ID of first particle = %lld\n", firstID);
     message(rank, "T_nu = %e eV\n", T_eV);
-
-    /* Retrieve  physical constant */
-    const double c = us.SpeedOfLight;
 
     /* Generate random neutrino particles */
     for (int i=0; i<localParticleNumber; i++) {
@@ -275,27 +277,29 @@ int main(int argc, char *argv[]) {
         message(rank, "First random momentum = %e eV\n", p_eV);
 
         /* Determine the density perturbation at this point */
-        double dnu = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+        double dnu = gridCIC(box_dic, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
         /* The local temperature perturbation dT/T */
         double deltaT = dnu/4;
 
         /* Determine the initial velocity perturbation at this point */
         double vel[3];
-        accelCIC(box2, N, BoxLen, p->x, vel);
+        accelCIC(box_tic, N, BoxLen, p->x, vel);
+
+        deltaT = box_dic[0];
 
         /* Apply the perturbation */
-        p->v[0] *= 1 + deltaT;
-        p->v[1] *= 1 + deltaT;
-        p->v[2] *= 1 + deltaT;
+        p->v[0] *= 1.0 + deltaT;
+        p->v[1] *= 1.0 + deltaT;
+        p->v[2] *= 1.0 + deltaT;
 
         /* The current energy */
         double eps_eV = hypot(p_eV/cosmo.a_begin, m_eV);
 
         /* Apply the velocity perturbation */
-        p->v[0] += vel[0] / c * eps_eV * cosmo.a_begin;
-        p->v[1] += vel[1] / c * eps_eV * cosmo.a_begin;
-        p->v[2] += vel[2] / c * eps_eV * cosmo.a_begin;
+        p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_begin;
+        p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_begin;
+        p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_begin;
 
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
@@ -307,8 +311,11 @@ int main(int argc, char *argv[]) {
         p->v_i[1] = p->v[1];
         p->v_i[2] = p->v[2];
         p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
-
     }
+
+    /* Free the boxes used for the initial conditions */
+    free(box_dic);
+    free(box_tic);
 
     message(rank, "Done with pre-initial conditions.\n");
 
@@ -325,32 +332,79 @@ int main(int argc, char *argv[]) {
     message(rank, "Doing %d iterations\n", MAX_ITER);
     message(rank, "\n");
 
+    /* We will re-compute the potentials when they have changed a certain amount */
+    const double k_ref = pars.RecomputeScaleRef; // 1 / U_L (reference scale)
+    const double recompute_trigger = pars.RecomputeTrigger;
+
+    message(rank, "Recompute trigger: %f\n", pars.RecomputeTrigger);
+    message(rank, "Recompute k_ref: %f 1/U_L\n", pars.RecomputeScaleRef);
+    message(rank, "\n");
+
     /* Start at the beginning */
     double a = a_begin;
 
-    message(rank, "ITER]\t a\t z\t I\n");
+    message(rank, "ITER]\t a\t z\t I\t recompute\n");
+
+    /* Allocate grids for the potentials (phi and psi) at two different times
+     * t0 <= t < t1. We will evaluate at time t using linear interpolation. */
+    double *box_phi0 = malloc(N*N*N*sizeof(double));
+    double *box_phi1 = malloc(N*N*N*sizeof(double));
+    double *box_psi0 = malloc(N*N*N*sizeof(double));
+    double *box_psi1 = malloc(N*N*N*sizeof(double));
+
+    /* The interpolated grids at time t */
+    double *box_phi = malloc(N*N*N*sizeof(double));
+    double *box_psi = malloc(N*N*N*sizeof(double));
+
+    /* Time derivative at time t */
+    double *box_phi_dot = malloc(N*N*N*sizeof(double));
+
+    /* Complex grids that will be used */
+    fftw_complex *fbox_phi = malloc(N*N*N*sizeof(fftw_complex));
+    fftw_complex *fbox_psi = malloc(N*N*N*sizeof(fftw_complex));
+
+    /* Transer functions evaluated at a reference scale during the last update */
+    double Tk_phi = 0.0;
+    double Tk_psi = 0.0;
+
+    /* Find the k index and spacing at the reference scale */
+    int k_ref_index;
+    double u_ref_k;
+    perturbSplineFindK(&spline, k_ref, &k_ref_index, &u_ref_k);
+
+    /* Time and interpolation indices of the last major update */
+    double log_tau_major_prev = 0.;
+    int tau_idx_major_prev;
+    double u_major_prev;
+
+    /* Time and interpolation indices of the next major update */
+    double log_tau_major_next = 0.;
+    int tau_idx_major_next;
+    double u_major_next;
 
     /* The main loop */
     for (int ITER = 0; ITER < MAX_ITER; ITER++) {
 
         /* Determine the next scale factor */
         double a_next;
-        if (ITER < MAX_ITER - 1) {
+        if (ITER == 0) {
+            a_next = a; //start with a step that does nothing
+        } else if (ITER < MAX_ITER - 1) {
             a_next = a * a_factor;
         } else {
             a_next = a_end;
         }
 
         /* Compute the current redshift and log conformal time */
-        double z = 1./a - 1;
+        double z = 1./a - 1.;
         double log_tau = perturbLogTauAtRedshift(&spline, z);
 
         /* Determine the half-step scale factor */
         double a_half = sqrt(a_next * a);
 
         /* Find the next and half-step conformal times */
-        double z_next = 1./a_next - 1;
-        double z_half = 1./a_half - 1;
+        double z_next = 1./a_next - 1.;
+        double z_half = 1./a_half - 1.;
         double log_tau_next = perturbLogTauAtRedshift(&spline, z_next);
         double log_tau_half = perturbLogTauAtRedshift(&spline, z_half);
         double dtau1 = exp(log_tau_half) - exp(log_tau);
@@ -364,51 +418,126 @@ int main(int argc, char *argv[]) {
         perturbSplineFindTau(&spline, log_tau_half, &tau_idx_half, &u_half);
         perturbSplineFindTau(&spline, log_tau_next, &tau_idx_next, &u_next);
 
-        /* The index of the potential transfer function psi */
+        /* A flag indicating whether we recomputed the potentials in this step */
+        int recompute = 0;
+
+        /* The inddices of the potential transfer functions psi and phi */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
         int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
+        if (index_psi < 0 || index_phi < 0) {
+            message(rank, "Error: transfer function '%s' or '%s' not found (%d, %d).\n", "psi", "phi", index_psi, index_phi);
+            return 1;
+        }
 
-        /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp_psi_curr = {&spline, index_psi, tau_idx_curr, u_curr};
-        struct spline_params sp_phi_curr = {&spline, index_phi, tau_idx_curr, u_curr};
-        struct spline_params sp_phi_half = {&spline, index_phi, tau_idx_half, u_half};
+        /* Evaluate the transfer functions at the reference scale */
+        double Tk_phi_curr = perturbSplineInterp(&spline, k_ref_index, tau_idx_curr, u_ref_k, u_curr, index_phi);
+        double Tk_psi_curr = perturbSplineInterp(&spline, k_ref_index, tau_idx_curr, u_ref_k, u_curr, index_psi);
+        /* Relative change since the last major update */
+        double Delta_Tk_phi = fabs((Tk_phi - Tk_phi_curr) / (Tk_phi + Tk_phi_curr));
+        double Delta_Tk_psi = fabs((Tk_psi - Tk_psi_curr) / (Tk_psi + Tk_psi_curr));
 
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp_psi_curr);
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_curr);
-        fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_half);
+        /* Do we need to recompute the potential grids? */
+        if (ITER < 2 || ITER == MAX_ITER - 1 ||
+            Delta_Tk_phi > recompute_trigger ||
+            Delta_Tk_psi > recompute_trigger) {
 
-        /* Now fbox = psi(a), fbox2 = phi(a), fbox3 = phi(a_half) */
+            /* Find the time of the next major recompute step */
+            double a_major_next = a;
+            for (int j = ITER + 1; j < MAX_ITER; j++) {
 
-        /* Fourier transform to real space */
-        fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
-        fft_execute(c2r);
-        fft_normalize_c2r(box, N, BoxLen);
-        fftw_destroy_plan(c2r);
+                /* Step forward */
+                if (j < MAX_ITER - 1) {
+                    a_major_next = a_major_next * a_factor;
+                } else {
+                    a_major_next = a_end;
+                }
 
-        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
-        fft_execute(c2r2);
-        fft_normalize_c2r(box2, N, BoxLen);
-        fftw_destroy_plan(c2r2);
+                /* Compute the corresponding redshift and log conformal time */
+                double z_major_next = 1./a_major_next - 1;
+                log_tau_major_next = perturbLogTauAtRedshift(&spline, z_major_next);
 
-        fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box3, FFTW_ESTIMATE);
-        fft_execute(c2r3);
-        fft_normalize_c2r(box3, N, BoxLen);
-        fftw_destroy_plan(c2r3);
+                /* Find the interpolation indices along the time dimension */
+                perturbSplineFindTau(&spline, log_tau_major_next, &tau_idx_major_next, &u_major_next);
 
-        if (rank == 0 && pars.OutputFields > 1) {
+                /* Evaluate the transfer functions */
+                double Tk_phi_sub = perturbSplineInterp(&spline, k_ref_index, tau_idx_major_next, u_ref_k, u_major_next, index_phi);
+                double Tk_psi_sub = perturbSplineInterp(&spline, k_ref_index, tau_idx_major_next, u_ref_k, u_major_next, index_psi);
+                /* Relative change compared to the current time step (main outer loop) */
+                double Delta_Tk_phi_sub = fabs((Tk_phi_curr - Tk_phi_sub) / (Tk_phi_curr + Tk_phi_sub));
+                double Delta_Tk_psi_sub = fabs((Tk_psi_curr - Tk_psi_sub) / (Tk_psi_curr + Tk_psi_sub));
+
+                /* Stop if we have found the next recompute step */
+                if (j == MAX_ITER - 1 || Delta_Tk_phi_sub > recompute_trigger || Delta_Tk_psi_sub > recompute_trigger)
+                    break;
+            }
+
+            /* The last major update was now */
+            log_tau_major_prev = log_tau;
+            perturbSplineFindTau(&spline, log_tau_major_prev, &tau_idx_major_prev, &u_major_prev);
+
+            /* We are recomputing the potentials */
+            recompute = 1;
+
+            /* Update the reference transfer functions */
+            Tk_phi = Tk_phi_curr;
+            Tk_psi = Tk_psi_curr;
+
+            /* Copy the current boxes at t=t1 to the slots for t=t0 */
+            memcpy(box_phi0, box_phi1, N*N*N*sizeof(double));
+            memcpy(box_psi0, box_psi1, N*N*N*sizeof(double));
+
+            /* Now compute the potentials at the next major time */
+
+            /* Package the perturbation theory interpolation spline parameters */
+            struct spline_params sp_phi_curr = {&spline, index_phi, tau_idx_major_next, u_major_next};
+            struct spline_params sp_psi_curr = {&spline, index_psi, tau_idx_major_next, u_major_next};
+
+            /* Apply the transfer function (read only fgrf, output into fbox) */
+            fft_apply_kernel(fbox_phi, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_curr);
+            fft_apply_kernel(fbox_psi, fgrf, N, BoxLen, kernel_transfer_function, &sp_psi_curr);
+
+            /* Fourier transform to real space */
+            fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox_phi, box_phi1, FFTW_ESTIMATE);
+            fft_execute(c2r);
+            fft_normalize_c2r(box_phi1, N, BoxLen);
+            fftw_destroy_plan(c2r);
+
+            fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox_psi, box_psi1, FFTW_ESTIMATE);
+            fft_execute(c2r2);
+            fft_normalize_c2r(box_psi1, N, BoxLen);
+            fftw_destroy_plan(c2r2);
+
+            /* Recompute the potential derivative grid */
+            double inv_delta_tau = 1.0 / (exp(log_tau_major_next) - exp(log_tau_major_prev));
+            for (int i=0; i<N*N*N; i++) {
+                box_phi_dot[i] = (box_phi1[i] - box_phi0[i]) * inv_delta_tau;
+            }
+        }
+
+        /* Linearly interpolate the potentials to the current time step */
+        double o = (log_tau - log_tau_major_prev) / (log_tau_major_next - log_tau_major_prev);
+        for (int i=0; i<N*N*N; i++) {
+            box_phi[i] = o * box_phi1[i] + (1.0 - o) * box_phi0[i];
+            box_psi[i] = o * box_psi1[i] + (1.0 - o) * box_psi0[i];
+        }
+
+        if (rank == 0 && ((pars.OutputFields > 1 && recompute) || (pars.OutputFields > 2 && ITER % 10 == 0))) {
             char psi_fname[50];
             sprintf(psi_fname, "%s/psi_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box, N, BoxLen, psi_fname);
+            writeFieldFile(box_psi, N, BoxLen, psi_fname);
 
             char phi_fname[50];
             sprintf(phi_fname, "%s/phi_%d.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box2, N, BoxLen, phi_fname);
+            writeFieldFile(box_phi, N, BoxLen, phi_fname);
 
-            char phi_fname_b[50];
-            sprintf(phi_fname_b, "%s/phi_%db.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box3, N, BoxLen, phi_fname_b);
+            char phi_dot_fname[50];
+            sprintf(phi_dot_fname, "%s/phi_dot_%d.hdf5", pars.OutputDirectory, ITER);
+            writeFieldFile(box_phi_dot, N, BoxLen, phi_dot_fname);
         }
+
+        /* Skip the particle integration during the first step */
+        if (ITER == 0)
+            continue;
 
         /* Integrate the particles */
         #pragma omp parallel for
@@ -416,23 +545,22 @@ int main(int argc, char *argv[]) {
             struct particle_ext *p = &genparts[i];
 
             /* Get the acceleration from the scalar potential psi */
-            double acc[3];
-            accelCIC(box, N, BoxLen, p->x, acc);
+            double acc_psi[3];
+            accelCIC(box_psi, N, BoxLen, p->x, acc_psi);
 
             /* Get the acceleration from the scalar potential phi */
             double acc_phi[3];
-            accelCIC(box2, N, BoxLen, p->x, acc_phi);
+            accelCIC(box_phi, N, BoxLen, p->x, acc_phi);
 
             /* Also fetch the value of the potential at the particle position */
-            double psi = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double psi_c2 = psi / (c * c);
-            double phi_c2 = phi / (c * c);
+            double psi = gridCIC(box_psi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi = gridCIC(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double psi_c2 = psi * inv_c2;
+            double phi_c2 = phi * inv_c2;
 
-            /* Also compute the time derivative of phi using finite difference */
-            double phi_half = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_dot = (phi_half - phi) / dtau1;
-            double phi_dot_c2 = phi_dot / (c * c);
+            /* Also fetch the time derivative of phi at the particle position */
+            double phi_dot = gridCIC(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot_c2 = phi_dot * inv_c2;
 
             /* Inner product of v_i with acc_phi */
             double vacx = p->v_i[0] * acc_phi[0];
@@ -440,21 +568,21 @@ int main(int argc, char *argv[]) {
             double vacz = p->v_i[2] * acc_phi[2];
             double vac = vacx + vacy + vacz;
 
-            /* Fetch the relativistic correction factors */
+            /* Compute the relativistic correction factors */
             double q = p->v_i_mag;
             double q2 = q * q;
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1. / epsfac;
 
             /* Compute kick and drift factors */
-            double kick_psi = epsfac / c;
-            double kick_phi = epsfac_inv / c;
+            double kick_psi = epsfac * inv_c;
+            double kick_phi = epsfac_inv * inv_c;
             double drift = epsfac_inv * (1.0 + psi_c2 + phi_c2) * c;
 
             /* Execute first gradient term */
-            p->v[0] -= acc[0] * kick_psi * dtau1;
-            p->v[1] -= acc[1] * kick_psi * dtau1;
-            p->v[2] -= acc[2] * kick_psi * dtau1;
+            p->v[0] -= acc_psi[0] * kick_psi * dtau1;
+            p->v[1] -= acc_psi[1] * kick_psi * dtau1;
+            p->v[2] -= acc_psi[2] * kick_psi * dtau1;
 
             /* Add anti-symmetric gradient term (only rotates) */
             p->v[0] -= (q2 * acc_phi[0] - p->v_i[0] * vac) * kick_phi * dtau1;
@@ -472,37 +600,11 @@ int main(int argc, char *argv[]) {
             p->x[2] += p->v[2] * drift * dtau;
         }
 
-        /* Next, we will compute the potential at the half-step time */
-
-        /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp_psi_half = {&spline, index_psi, tau_idx_half, u_half};
-        struct spline_params sp_phi_next = {&spline, index_phi, tau_idx_next, u_next};
-
-        /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp_psi_half);
-        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp_phi_next);
-
-        /* Now fbox = psi(a_half), fbox2 = phi(a_next), fbox3 = phi(a_half) */
-
-        /* Fourier transform to real space */
-        c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
-        fft_execute(c2r);
-        fft_normalize_c2r(box, N, BoxLen);
-        fftw_destroy_plan(c2r);
-
-        c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box2, FFTW_ESTIMATE);
-        fft_execute(c2r2);
-        fft_normalize_c2r(box2, N, BoxLen);
-        fftw_destroy_plan(c2r2);
-
-        if (rank == 0 && pars.OutputFields > 1) {
-            char psi_fname[50];
-            sprintf(psi_fname, "%s/psi_%db.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box, N, BoxLen, psi_fname);
-
-            char phi_fname[50];
-            sprintf(phi_fname, "%s/phi_%dc.hdf5", pars.OutputDirectory, ITER);
-            writeFieldFile(box2, N, BoxLen, phi_fname);
+        /* Linearly interpolate the potentials to the half-time step */
+        double o2 = (log_tau_half - log_tau_major_prev) / (log_tau_major_next - log_tau_major_prev);
+        for (int i=0; i<N*N*N; i++) {
+            box_phi[i] = o2 * box_phi1[i] + (1.0 - o2) * box_phi0[i];
+            box_psi[i] = o2 * box_psi1[i] + (1.0 - o2) * box_psi0[i];
         }
 
         /* Integrate the particles during the second half-step */
@@ -511,18 +613,16 @@ int main(int argc, char *argv[]) {
             struct particle_ext *p = &genparts[i];
 
             /* Get the acceleration from the scalar potential psi */
-            double acc[3];
-            accelCIC(box, N, BoxLen, p->x, acc);
+            double acc_psi[3];
+            accelCIC(box_psi, N, BoxLen, p->x, acc_psi);
 
             /* Get the acceleration from the scalar potential phi */
             double acc_phi[3];
-            accelCIC(box2, N, BoxLen, p->x, acc_phi);
+            accelCIC(box_phi, N, BoxLen, p->x, acc_phi);
 
-            /* Also compute the time derivative of phi using finite difference */
-            double phi_half = gridCIC(box3, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_next = gridCIC(box2, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi_dot = (phi_next - phi_half) / dtau2;
-            double phi_dot_c2 = phi_dot / (c * c);
+            /* Also fetch the time derivative of phi at the particle position */
+            double phi_dot = gridCIC(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot_c2 = phi_dot * inv_c2;
 
             /* Inner product of v_i with acc_phi */
             double vacx = p->v_i[0] * acc_phi[0];
@@ -530,20 +630,20 @@ int main(int argc, char *argv[]) {
             double vacz = p->v_i[2] * acc_phi[2];
             double vac = vacx + vacy + vacz;
 
-            /* Fetch the relativistic correction factors */
+            /* Compute the relativistic correction factors */
             double q = p->v_i_mag;
             double q2 = q * q;
             double epsfac = hypot(q, a * m_eV);
             double epsfac_inv = 1. / epsfac;
 
             /* Compute kick factors */
-            double kick_psi = epsfac / c;
-            double kick_phi = epsfac_inv / c;
+            double kick_psi = epsfac * inv_c;
+            double kick_phi = epsfac_inv * inv_c;
 
             /* Execute first gradient term */
-            p->v[0] -= acc[0] * kick_psi * dtau2;
-            p->v[1] -= acc[1] * kick_psi * dtau2;
-            p->v[2] -= acc[2] * kick_psi * dtau2;
+            p->v[0] -= acc_psi[0] * kick_psi * dtau2;
+            p->v[1] -= acc_psi[1] * kick_psi * dtau2;
+            p->v[2] -= acc_psi[2] * kick_psi * dtau2;
 
             /* Add anti-symmetric gradient term (only rotates) */
             p->v[0] -= (q2 * acc_phi[0] - p->v_i[0] * vac) * kick_phi * dtau2;
@@ -579,11 +679,26 @@ int main(int argc, char *argv[]) {
             /* Compute summary statistic */
             I_df *= 0.5 / pars.NumPartGenerate * weight_compute_invfreq;
 
-            message(rank, "%04d] %.2e %.2e %e\n", ITER, a, 1./a-1, I_df);
+            message(rank, "%04d] %.2e %.2e %e %d\n", ITER, a, 1./a-1, I_df, recompute);
         }
     }
 
+    /* Free grids that are no longer needed */
+    free(fbox_phi);
+    free(fbox_psi);
+    free(box_phi);
+    free(box_psi);
+    free(box_phi0);
+    free(box_phi1);
+    free(box_psi0);
+    free(box_psi1);
+    free(box_phi_dot);
+
     if (gauge_Nbody) {
+
+        /* Allocate boxes for the (density and flux) gauge transformations */
+        double *box_dshift = malloc(N*N*N*sizeof(double));
+        double *box_tshift = malloc(N*N*N*sizeof(double));
 
         header(rank, "Generating N-body gauge transformation grid");
 
@@ -607,44 +722,48 @@ int main(int argc, char *argv[]) {
             double u_tau; //spacing between subsequent bins
             perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
 
-            /* The indices of the potential transfer function */
+            /* The indices of the necessary transfer function */
             int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
             int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
             int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
             int index_ncdm = findTitle(ptdat.titles, title, ptdat.n_functions);
             int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
+            if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 ||
+                index_ncdm < 0 || index_HTNbp < 0) {
+                message(rank, "Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
+                return 1;
+            }
 
             /* Package the perturbation theory interpolation spline parameters */
-            struct spline_params sp = {&spline, index_hdot, tau_index, u_tau};
-            struct spline_params sp2 = {&spline, index_etadot, tau_index, u_tau};
-            struct spline_params sp3 = {&spline, index_Nbshift, tau_index, u_tau};
-            struct spline_params sp4 = {&spline, index_HTNbp, tau_index, u_tau};
+            struct spline_params sp_hdot = {&spline, index_hdot, tau_index, u_tau};
+            struct spline_params sp_etadot = {&spline, index_etadot, tau_index, u_tau};
+            struct spline_params sp_Nbshift = {&spline, index_Nbshift, tau_index, u_tau};
+            struct spline_params sp_HTNbp = {&spline, index_HTNbp, tau_index, u_tau};
+
+            /* Allocate boxes for the complex terms needed for the gauge transformation */
+            fftw_complex *fbox_alpha = malloc(N*N*N*sizeof(fftw_complex));
+            fftw_complex *fbox_hdot = malloc(N*N*N*sizeof(fftw_complex));
+            fftw_complex *fbox_etadot = malloc(N*N*N*sizeof(fftw_complex));
+            fftw_complex *fbox_Nbshift = malloc(N*N*N*sizeof(fftw_complex));
 
             /* Apply the transfer function (read only fgrf, output into fbox) */
-            fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
-            fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
-            fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp3);
+            fft_apply_kernel(fbox_hdot, fgrf, N, BoxLen, kernel_transfer_function, &sp_hdot);
+            fft_apply_kernel(fbox_etadot, fgrf, N, BoxLen, kernel_transfer_function, &sp_etadot);
+            fft_apply_kernel(fbox_Nbshift, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nbshift);
 
             /* Compute alpha * k^2 = h_dot + 6 * eta_dot */
             for (int i=0; i<N*N*(N/2+1); i++) {
-                fbox[i] += 6 * fbox2[i];
+                fbox_alpha[i] = fbox_hdot[i] + 6.0 * fbox_etadot[i];
             }
 
             /* Apply the inverse Poisson kernel -1/k^2 */
             fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
 
-            /* Fourier transform to real space */
-            fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
-            fft_execute(c2r);
-            fft_normalize_c2r(box, N, BoxLen);
-            fftw_destroy_plan(c2r);
+            /* Free grids that are no longer needed */
+            free(fbox_hdot);
+            free(fbox_etadot);
 
-            fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
-            fft_execute(c2r2);
-            fft_normalize_c2r(box2, N, BoxLen);
-            fftw_destroy_plan(c2r2);
-
-            /* Compute the conformatl time derivative of the background density */
+            /* Compute the conformal time derivative of the background density */
             double Omega_nu1 = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
             double Omega_nu2 = perturbDensityAtLogTau(&spline, log_tau2, index_ncdm);
 
@@ -661,46 +780,52 @@ int main(int argc, char *argv[]) {
             double dtau = exp(log_tau2) - exp(log_tau_end);
             double rho_dot = (rho_nu2 - rho_nu1) / dtau;
             double rho_dot_rho = rho_dot / rho_nu1;
+            double rho_dot_rho_c4 = rho_dot_rho / (c * c * c * c);
 
-            /* Multiply by the appropriate factor */
+            /* Compute the total density gauge shift */
             for (int i=0; i<N*N*N; i++) {
-                box[i] *= -0.5 * rho_dot_rho / (c * c * c * c);
-                box2[i] *= 1 + w_ncdm;
+                fbox[i] = -0.5 * fbox_alpha[i] * rho_dot_rho_c4 - (1.0 + w_ncdm) * fbox_Nbshift[i];
             }
 
-            if (rank == 0 && pars.OutputFields) {
-                char alpha_fname[50];
-                sprintf(alpha_fname, "%s/gauge_alpha.hdf5", pars.OutputDirectory);
-                writeFieldFile(box, N, BoxLen, alpha_fname);
-
-                char Nbshift_fname[50];
-                sprintf(Nbshift_fname, "%s/gauge_Nbshift.hdf5", pars.OutputDirectory);
-                writeFieldFile(box2, N, BoxLen, Nbshift_fname);
-            }
-
-            /* Add the N-body gauge shift to the overall gauge shift */
-            for (int i=0; i<N*N*N; i++) {
-                box[i] -= box2[i];
-            }
-
-            /* Apply the transfer function for H_T_Nb_prime */
-            fft_apply_kernel(fbox3, fgrf, N, BoxLen, kernel_transfer_function, &sp4);
-
-            /* Apply the inverse Poisson kernel -1/k^2 */
-            fft_apply_kernel(fbox3, fbox3, N, BoxLen, kernel_inv_poisson, NULL);
+            /* Free grids that are no longer needed */
+            free(fbox_alpha);
+            free(fbox_Nbshift);
 
             /* Fourier transform to real space */
-            fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox3, box2, FFTW_ESTIMATE);
+            fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box_dshift, FFTW_ESTIMATE);
+            fft_execute(c2r);
+            fft_normalize_c2r(box_dshift, N, BoxLen);
+            fftw_destroy_plan(c2r);
+
+            if (rank == 0 && pars.OutputFields) {
+                char density_fname[50];
+                sprintf(density_fname, "%s/gauge_dshift.hdf5", pars.OutputDirectory);
+                writeFieldFile(box_dshift, N, BoxLen, density_fname);
+            }
+
+            /* Allocate new complex grid */
+            fftw_complex *fbox_HTNbp = malloc(N*N*N*sizeof(fftw_complex));
+
+            /* Apply the transfer function for H_T_Nb_prime */
+            fft_apply_kernel(fbox_HTNbp, fgrf, N, BoxLen, kernel_transfer_function, &sp_HTNbp);
+
+            /* Apply the inverse Poisson kernel -1/k^2 */
+            fft_apply_kernel(fbox_HTNbp, fbox_HTNbp, N, BoxLen, kernel_inv_poisson, NULL);
+
+            /* Fourier transform to real space */
+            fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox_HTNbp, box_tshift, FFTW_ESTIMATE);
             fft_execute(c2r3);
-            fft_normalize_c2r(box2, N, BoxLen);
+            fft_normalize_c2r(box_tshift, N, BoxLen);
             fftw_destroy_plan(c2r3);
 
             if (rank == 0 && pars.OutputFields) {
                 char vshift_fname[50];
                 sprintf(vshift_fname, "%s/gauge_vshift.hdf5", pars.OutputDirectory);
-                writeFieldFile(box2, N, BoxLen, vshift_fname);
+                writeFieldFile(box_tshift, N, BoxLen, vshift_fname);
             }
 
+            /* Free the remaining complex grid */
+            free(fbox_HTNbp);
         }
 
         message(rank, "Applying N-body gauge transformation to the particles.\n");
@@ -711,14 +836,14 @@ int main(int argc, char *argv[]) {
             struct particle_ext *p = &genparts[i];
 
             /* Determine the gauge shift at this point */
-            double delta = gridCIC(box, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double delta = gridCIC(box_dshift, N, BoxLen, p->x[0], p->x[1], p->x[2]);
 
             /* The equivalent temperature perturbation dT/T */
             double deltaT = delta/isen_ncdm;
 
             /* Determine the velocity shift at this point */
             double vel[3];
-            accelCIC(box2, N, BoxLen, p->x, vel);
+            accelCIC(box_tshift, N, BoxLen, p->x, vel);
 
             /* Apply the density shift */
             p->v[0] *= 1 - deltaT;
@@ -730,10 +855,14 @@ int main(int argc, char *argv[]) {
             double eps_eV = hypot(p_eV/a_end, m_eV);
 
             /* Apply the velocity shift */
-            p->v[0] += vel[0] / c * eps_eV * cosmo.a_end;
-            p->v[1] += vel[1] / c * eps_eV * cosmo.a_end;
-            p->v[2] += vel[2] / c * eps_eV * cosmo.a_end;
+            p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_end;
+            p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_end;
+            p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_end;
         }
+
+        /* Free the gauge transformation boxes */
+        free(box_dshift);
+        free(box_tshift);
     }
 
     /* Final operations before writing the particles to disk */
@@ -769,10 +898,6 @@ int main(int argc, char *argv[]) {
     free(box);
     free(fgrf);
     free(fbox);
-    free(fbox2);
-    free(fbox3);
-    free(box2);
-    free(box3);
 
     header(rank, "Prepare output");
 

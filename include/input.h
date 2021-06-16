@@ -53,6 +53,8 @@ struct params {
     double ScaleFactorBegin;
     double ScaleFactorEnd;
     double ScaleFactorStep;
+    double RecomputeTrigger;
+    double RecomputeScaleRef;
 
     /* Output parameters */
     char *OutputDirectory;

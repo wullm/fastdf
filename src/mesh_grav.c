@@ -21,73 +21,93 @@
 #include "../include/mesh_grav.h"
 #include "../include/fft.h"
 
+/* Direct cloud in cell interpolation */
+static inline double fastCIC(const double *box, int N, int i, int j, int k,
+                             double dx, double dy, double dz, double tx,
+                             double ty, double tz) {
+
+    return box[row_major(i, j, k, N)] * tx * ty * tz
+         + box[row_major(i, j, k+1, N)] * tx * ty * dz
+         + box[row_major(i, j+1, k, N)] * tx * dy * tz
+         + box[row_major(i, j+1, k+1, N)] * tx * dy * dz
+         + box[row_major(i+1, j, k, N)] * dx * ty * tz
+         + box[row_major(i+1, j, k+1, N)] * dx * ty * dz
+         + box[row_major(i+1, j+1, k, N)] * dx * dy * tz
+         + box[row_major(i+1, j+1, k+1, N)] * dx * dy * dz;
+}
+
 /* Cloud in cell interpolation */
 double gridCIC(const double *box, int N, double boxlen, double x, double y,
                double z) {
+
+    /* Physical length to grid conversion factor */
+    double fac = N / boxlen;
+
     /* Convert to float grid dimensions */
-    double X = x*N/boxlen;
-    double Y = y*N/boxlen;
-    double Z = z*N/boxlen;
+    double X = x * fac;
+    double Y = y * fac;
+    double Z = z * fac;
 
-    /* Integer grid position */
-    int iX = (int) floor(X);
-    int iY = (int) floor(Y);
-    int iZ = (int) floor(Z);
+    /* Integer grid position (floor is necessary to handle negatives) */
+    int iX = floor(X);
+    int iY = floor(Y);
+    int iZ = floor(Z);
 
-    /* Intepolate the necessary fields with CIC or TSC */
-    double lookLength = 1.0;
-    int lookLftX = (int) floor((X-iX) - lookLength);
-    int lookRgtX = (int) floor((X-iX) + lookLength);
-    int lookLftY = (int) floor((Y-iY) - lookLength);
-    int lookRgtY = (int) floor((Y-iY) + lookLength);
-    int lookLftZ = (int) floor((Z-iZ) - lookLength);
-    int lookRgtZ = (int) floor((Z-iZ) + lookLength);
+    /* Displacements from grid corner */
+    double dx = X - iX;
+    double dy = Y - iY;
+    double dz = Z - iZ;
 
-    /* Accumulate */
-    double sum = 0;
-    for (int i=lookLftX; i<=lookRgtX; i++) {
-        for (int j=lookLftY; j<=lookRgtY; j++) {
-            for (int k=lookLftZ; k<=lookRgtZ; k++) {
-                double xx = fabs(X - (iX+i));
-                double yy = fabs(Y - (iY+j));
-                double zz = fabs(Z - (iZ+k));
+    double tx = 1.0 - dx;
+    double ty = 1.0 - dy;
+    double tz = 1.0 - dz;
 
-                double part_x = xx <= 1 ? 1-xx : 0;
-                double part_y = yy <= 1 ? 1-yy : 0;
-                double part_z = zz <= 1 ? 1-zz : 0;
-
-                sum += box[row_major(iX+i, iY+j, iZ+k, N)] * (part_x*part_y*part_z);
-            }
-        }
-    }
-
-    return sum;
+    return fastCIC(box, N, iX, iY, iZ, dx, dy, dz, tx, ty, tz);
 }
-
 
 /* Compute the acceleration from the potential grid using CIC interpolation */
 void accelCIC(const double *box, int N, double boxlen, double *x, double *a) {
 
-    double fac = boxlen / N;
+    /* Physical length to grid conversion factor */
+    double fac = N / boxlen;
+    double fac_over_12 = fac / 12;
+
+    /* Convert to float grid dimensions */
+    double X = x[0] * fac;
+    double Y = x[1] * fac;
+    double Z = x[2] * fac;
+
+    /* Integer grid position (floor is necessary to handle negatives) */
+    int iX = (int) X;
+    int iY = (int) Y;
+    int iZ = (int) Z;
+
+    /* Displacements from grid corner */
+    double dx = X - iX;
+    double dy = Y - iY;
+    double dz = Z - iZ;
+    double tx = 1.0 - dx;
+    double ty = 1.0 - dy;
+    double tz = 1.0 - dz;
 
     a[0] = 0.0;
-    a[0] -= gridCIC(box, N, boxlen, x[0] + 2 * fac, x[1], x[2]);
-    a[0] += gridCIC(box, N, boxlen, x[0] + 1 * fac, x[1], x[2]) * 8;
-    a[0] -= gridCIC(box, N, boxlen, x[0] - 1 * fac, x[1], x[2]) * 8;
-    a[0] += gridCIC(box, N, boxlen, x[0] - 2 * fac, x[1], x[2]);
-    a[0] /= 12 * fac;
+    a[0] -= fastCIC(box, N, iX + 2, iY, iZ, dx, dy, dz, tx, ty, tz);
+    a[0] += fastCIC(box, N, iX + 1, iY, iZ, dx, dy, dz, tx, ty, tz) * 8.;
+    a[0] -= fastCIC(box, N, iX - 1, iY, iZ, dx, dy, dz, tx, ty, tz) * 8.;
+    a[0] += fastCIC(box, N, iX - 2, iY, iZ, dx, dy, dz, tx, ty, tz);
+    a[0] *= fac_over_12;
 
     a[1] = 0.0;
-    a[1] -= gridCIC(box, N, boxlen, x[0], x[1] + 2 * fac, x[2]);
-    a[1] += gridCIC(box, N, boxlen, x[0], x[1] + 1 * fac, x[2]) * 8;
-    a[1] -= gridCIC(box, N, boxlen, x[0], x[1] - 1 * fac, x[2]) * 8;
-    a[1] += gridCIC(box, N, boxlen, x[0], x[1] - 2 * fac, x[2]);
-    a[1] /= 12 * fac;
+    a[1] -= fastCIC(box, N, iX, iY + 2, iZ, dx, dy, dz, tx, ty, tz);
+    a[1] += fastCIC(box, N, iX, iY + 1, iZ, dx, dy, dz, tx, ty, tz) * 8.;
+    a[1] -= fastCIC(box, N, iX, iY - 1, iZ, dx, dy, dz, tx, ty, tz) * 8.;
+    a[1] += fastCIC(box, N, iX, iY - 2, iZ, dx, dy, dz, tx, ty, tz);
+    a[1] *= fac_over_12;
 
     a[2] = 0.0;
-    a[2] -= gridCIC(box, N, boxlen, x[0], x[1], x[2] + 2 * fac);
-    a[2] += gridCIC(box, N, boxlen, x[0], x[1], x[2] + 1 * fac) * 8;
-    a[2] -= gridCIC(box, N, boxlen, x[0], x[1], x[2] - 1 * fac) * 8;
-    a[2] += gridCIC(box, N, boxlen, x[0], x[1], x[2] - 2 * fac);
-    a[2] /= 12 * fac;
+    a[2] -= fastCIC(box, N, iX, iY, iZ + 2, dx, dy, dz, tx, ty, tz);
+    a[2] += fastCIC(box, N, iX, iY, iZ + 1, dx, dy, dz, tx, ty, tz) * 8.;
+    a[2] -= fastCIC(box, N, iX, iY, iZ - 1, dx, dy, dz, tx, ty, tz) * 8.;
+    a[2] += fastCIC(box, N, iX, iY, iZ - 2, dx, dy, dz, tx, ty, tz);
+    a[2] *= fac_over_12;
 }
