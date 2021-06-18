@@ -78,9 +78,9 @@ void accelCIC(const double *box, int N, double boxlen, double *x, double *a) {
     double Z = x[2] * fac;
 
     /* Integer grid position (floor is necessary to handle negatives) */
-    int iX = (int) X;
-    int iY = (int) Y;
-    int iZ = (int) Z;
+    int iX = floor(X);
+    int iY = floor(Y);
+    int iZ = floor(Z);
 
     /* Displacements from grid corner */
     double dx = X - iX;
