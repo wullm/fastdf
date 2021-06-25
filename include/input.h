@@ -44,6 +44,7 @@ struct params {
     long long int NumPartGenerate;
     long long int FirstID;
     char *GaussianRandomFieldFile;
+    char InvertField;
 
     /* Simulation parameters */
     char *Name;

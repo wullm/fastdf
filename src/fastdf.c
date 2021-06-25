@@ -134,6 +134,14 @@ int main(int argc, char *argv[]) {
     message(rank, "BoxLen = %.2f U_L\n", BoxLen);
     message(rank, "GridSize = %d\n", N);
 
+    /* Do we want to invert the field for paired simulations? */
+    if (pars.InvertField) {
+        message(rank, "Inverting input field.\n");
+        for (int i = 0; i < N * N * N; i++) {
+            box[i] *= -1.0;
+        }
+    }
+
     /* Fourier transform the Gaussian random field */
     fftw_complex *fbox = malloc(N*N*N*sizeof(fftw_complex));
     fftw_complex *fgrf = malloc(N*N*N*sizeof(fftw_complex));
