@@ -341,11 +341,17 @@ int main(int argc, char *argv[]) {
     message(rank, "\n");
 
     /* We will re-compute the potentials when they have changed a certain amount */
-    const double k_ref = pars.RecomputeScaleRef; // 1 / U_L (reference scale)
     const double recompute_trigger = pars.RecomputeTrigger;
+    double k_ref;  // 1 / U_L (reference scale)
+    if (pars.RecomputeScaleRef <= 0.0) {
+        /* Set equal to the smallest scale that will be needed */
+        k_ref = 2.0 * M_PI * sqrt(3.0) * N / BoxLen;
+    } else {
+        k_ref = pars.RecomputeScaleRef;
+    }
 
-    message(rank, "Recompute trigger: %f\n", pars.RecomputeTrigger);
-    message(rank, "Recompute k_ref: %f 1/U_L\n", pars.RecomputeScaleRef);
+    message(rank, "Recompute trigger: %f\n", recompute_trigger);
+    message(rank, "Recompute k_ref: %f 1/U_L\n", k_ref);
     message(rank, "\n");
 
     /* Start at the beginning */

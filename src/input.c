@@ -35,6 +35,7 @@ int readParams(struct params *pars, const char *fname) {
      pars->ScaleFactorEnd = ini_getd("Simulation", "ScaleFactorEnd", 0.01, fname);
      pars->ScaleFactorStep = ini_getd("Simulation", "ScaleFactorStep", 0.05, fname);
      pars->RecomputeTrigger = ini_getd("Simulation", "RecomputeTrigger", 0.01, fname);
+     pars->RecomputeScaleRef = ini_getd("Simulation", "RecomputeScaleRef", 0.0, fname);
      pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname); 
      pars->InvertField = ini_getd("Box", "InvertField", 0, fname);
 
