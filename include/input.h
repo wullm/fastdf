@@ -60,6 +60,8 @@ struct params {
     /* Output parameters */
     char *OutputDirectory;
     char *OutputFilename;
+    char *InputDirectory;
+    char *InputFilename;
     char *ExportName;
     char OutputFields;
 
