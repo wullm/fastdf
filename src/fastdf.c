@@ -280,6 +280,7 @@ int main(int argc, char *argv[]) {
 
         /* Compute the momentum in eV */
         const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+        const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         if (i==0)
         message(rank, "First random momentum = %e eV\n", p_eV);
@@ -294,8 +295,6 @@ int main(int argc, char *argv[]) {
         double vel[3];
         accelCIC(box_tic, N, BoxLen, p->x, vel);
 
-        deltaT = box_dic[0];
-
         /* Apply the perturbation */
         p->v[0] *= 1.0 + deltaT;
         p->v[1] *= 1.0 + deltaT;
@@ -308,8 +307,6 @@ int main(int argc, char *argv[]) {
         p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_begin;
         p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_begin;
         p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_begin;
-
-        const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         /* Compute initial phase space density */
         p->f_i = f_i;
