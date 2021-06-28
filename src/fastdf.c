@@ -494,8 +494,10 @@ int main(int argc, char *argv[]) {
             Tk_psi = Tk_psi_curr;
 
             /* Copy the current boxes at t=t1 to the slots for t=t0 */
-            memcpy(box_phi0, box_phi1, N*N*N*sizeof(double));
-            memcpy(box_psi0, box_psi1, N*N*N*sizeof(double));
+            if (ITER > 0) {
+                memcpy(box_phi0, box_phi1, N*N*N*sizeof(double));
+                memcpy(box_psi0, box_psi1, N*N*N*sizeof(double));
+            }
 
             /* Now compute the potentials at the next major time */
 
@@ -517,19 +519,23 @@ int main(int argc, char *argv[]) {
             fft_execute(c2r2);
             fft_normalize_c2r(box_psi1, N, BoxLen);
             fftw_destroy_plan(c2r2);
-
-            /* Recompute the potential derivative grid */
-            double inv_delta_tau = 1.0 / (exp(log_tau_major_next) - exp(log_tau_major_prev));
-            for (int i=0; i<N*N*N; i++) {
-                box_phi_dot[i] = (box_phi1[i] - box_phi0[i]) * inv_delta_tau;
-            }
         }
+
+        /* Skip the particle integration during the first step */
+        if (ITER == 0)
+            continue;
 
         /* Linearly interpolate the potentials to the current time step */
         double o = (log_tau - log_tau_major_prev) / (log_tau_major_next - log_tau_major_prev);
         for (int i=0; i<N*N*N; i++) {
             box_phi[i] = o * box_phi1[i] + (1.0 - o) * box_phi0[i];
             box_psi[i] = o * box_psi1[i] + (1.0 - o) * box_psi0[i];
+        }
+
+        /* Compute the potential derivative grid */
+        double inv_delta_tau = 1.0 / (exp(log_tau_major_next) - exp(log_tau_major_prev));
+        for (int i=0; i<N*N*N; i++) {
+            box_phi_dot[i] = (box_phi1[i] - box_phi0[i]) * inv_delta_tau;
         }
 
         if (rank == 0 && ((pars.OutputFields > 1 && recompute) || (pars.OutputFields > 2 && ITER % 10 == 0))) {
@@ -545,10 +551,6 @@ int main(int argc, char *argv[]) {
             sprintf(phi_dot_fname, "%s/phi_dot_%d.hdf5", pars.OutputDirectory, ITER);
             writeFieldFile(box_phi_dot, N, BoxLen, phi_dot_fname);
         }
-
-        /* Skip the particle integration during the first step */
-        if (ITER == 0)
-            continue;
 
         /* Integrate the particles */
         #pragma omp parallel for
