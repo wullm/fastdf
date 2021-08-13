@@ -181,13 +181,13 @@ int main(int argc, char *argv[]) {
     header(rank, "Particle distribution");
 
     /* The particle number is M^3 */
-    int M = pars.CubeRootNumber;
+    long long M = pars.CubeRootNumber;
 
     /* Determine what particles belong to this slice */
     double fac = (double) M / MPI_Rank_Count;
-    int X_min = ceil(rank * fac);
-    int X_max = ceil((rank + 1) * fac);
-    int MX = X_max - X_min;
+    long long X_min = ceil(rank * fac);
+    long long X_max = ceil((rank + 1) * fac);
+    long long MX = X_max - X_min;
     long long localParticleNumber = MX * M * M;
     long long localFirstNumber = X_min * M * M;
 
@@ -195,8 +195,14 @@ int main(int argc, char *argv[]) {
     long long totalParticlesAssigned;
     MPI_Allreduce(&localParticleNumber, &totalParticlesAssigned, 1,
                    MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
-    assert(totalParticlesAssigned == M * M * M);
-    printf("%03d: Local particles [%04d, %04d], first = %lld, last = %lld, total = %lld\n", rank, X_min, X_max, localFirstNumber, localFirstNumber + localParticleNumber - 1, totalParticlesAssigned);
+    assert(totalParticlesAssigned == (long long) M * M * M);
+    printf("%03d: Local particles [%04lld, %04lld], first = %lld, last = %lld, total = %lld\n", rank, X_min, X_max, localFirstNumber, localFirstNumber + localParticleNumber - 1, totalParticlesAssigned);
+
+    /* Check that we are not exceeding the HDF5 parallel write limit */
+    if (localParticleNumber * 3 * sizeof(double) > HDF5_PARALLEL_LIMIT) {
+        message(rank, "\nError: Exceeding 2GB limit on parallel HDF5 writes. Increase the number of MPI tasks.\n");
+        exit(1);
+    }
 
     /* The particles to be generated on this node */
     struct particle_ext *genparts = calloc(localParticleNumber,
@@ -269,7 +275,7 @@ int main(int argc, char *argv[]) {
     message(rank, "T_nu = %e eV\n", T_eV);
 
     /* Generate random neutrino particles */
-    for (int i=0; i<localParticleNumber; i++) {
+    for (long long i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
         /* Set the ID of the particle */
@@ -554,7 +560,7 @@ int main(int argc, char *argv[]) {
 
         /* Integrate the particles */
         #pragma omp parallel for
-        for (int i=0; i<localParticleNumber; i++) {
+        for (long long i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
             /* Get the acceleration from the scalar potential psi */
@@ -622,7 +628,7 @@ int main(int argc, char *argv[]) {
 
         /* Integrate the particles during the second half-step */
         #pragma omp parallel for
-        for (int i=0; i<localParticleNumber; i++) {
+        for (long long i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
             /* Get the acceleration from the scalar potential psi */
@@ -673,14 +679,14 @@ int main(int argc, char *argv[]) {
         a = a_next;
 
         /* Compute weights for fraction of particles (diagnostics only) */
-        int weight_compute_invfreq = 1000;
+        long long weight_compute_invfreq = 1000;
 
         /* Collect the I statistic */
         if (rank == 0) {
             double I_df = 0;
 
             #pragma omp parallel for reduction(+:I_df)
-            for (int i=0; i<localParticleNumber; i+=weight_compute_invfreq) {
+            for (long long i=0; i<localParticleNumber; i+=weight_compute_invfreq) {
                 struct particle_ext *p = &genparts[i];
 
                 double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
@@ -845,7 +851,7 @@ int main(int argc, char *argv[]) {
 
         /* Perform the gauge transformation */
         #pragma omp parallel for
-        for (int i=0; i<localParticleNumber; i++) {
+        for (long long i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
             /* Determine the gauge shift at this point */
@@ -880,7 +886,7 @@ int main(int argc, char *argv[]) {
 
     /* Final operations before writing the particles to disk */
     #pragma omp parallel for
-    for (int i=0; i<localParticleNumber; i++) {
+    for (long long i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
         /* Ensure that particles wrap */
@@ -905,6 +911,9 @@ int main(int argc, char *argv[]) {
         p->v[0] /= a_end;
         p->v[1] /= a_end;
         p->v[2] /= a_end;
+        
+        if (i==0)
+        printf("AAAA %e %e\n", hypot3(p->v[0], p->v[1], p->v[2]), c);
     }
 
     /* Free memory */
@@ -1017,7 +1026,7 @@ int main(int argc, char *argv[]) {
     double *vels = malloc(3 * localParticleNumber * sizeof(double));
     double *masses = malloc(1 * localParticleNumber * sizeof(double));
     long long *ids = malloc(1 * localParticleNumber * sizeof(long long));
-    for (int i=0; i<localParticleNumber; i++) {
+    for (long long i=0; i<localParticleNumber; i++) {
         coords[i * 3 + 0] = genparts[i].x[0];
         coords[i * 3 + 1] = genparts[i].x[1];
         coords[i * 3 + 2] = genparts[i].x[2];
