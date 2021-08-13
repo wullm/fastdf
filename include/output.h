@@ -33,4 +33,7 @@ hid_t openFile_MPI(MPI_Comm comm, const char *fname);
 int writeFieldFile(const double *box, int N, double box_len, const char *fname);
 int writeFieldData(const double *box, hid_t h_file);
 
+/* The current limit of for parallel HDF5 writes is 2GB */
+#define HDF5_PARALLEL_LIMIT 2147000000LL
+
 #endif
