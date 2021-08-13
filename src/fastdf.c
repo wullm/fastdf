@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
     long long totalParticlesAssigned;
     MPI_Allreduce(&localParticleNumber, &totalParticlesAssigned, 1,
                    MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
-    assert(totalParticlesAssigned == (long long) M * M * M);
+    assert(totalParticlesAssigned == M * M * M);
     printf("%03d: Local particles [%04lld, %04lld], first = %lld, last = %lld, total = %lld\n", rank, X_min, X_max, localFirstNumber, localFirstNumber + localParticleNumber - 1, totalParticlesAssigned);
 
     /* Check that we are not exceeding the HDF5 parallel write limit */
@@ -911,9 +911,6 @@ int main(int argc, char *argv[]) {
         p->v[0] /= a_end;
         p->v[1] /= a_end;
         p->v[2] /= a_end;
-        
-        if (i==0)
-        printf("AAAA %e %e\n", hypot3(p->v[0], p->v[1], p->v[2]), c);
     }
 
     /* Free memory */
