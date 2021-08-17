@@ -129,7 +129,8 @@ int main(int argc, char *argv[]) {
     header(rank, "Random phases");
     message(rank, "Reading Gaussian random field from %s.\n", pars.GaussianRandomFieldFile);
 
-    readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.GaussianRandomFieldFile);
+    readFieldFile(&box, &N, &BoxLen, pars.GaussianRandomFieldFile);
+    // readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.GaussianRandomFieldFile);
 
     message(rank, "BoxLen = %.2f U_L\n", BoxLen);
     message(rank, "GridSize = %d\n", N);
