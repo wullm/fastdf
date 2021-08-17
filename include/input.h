@@ -40,7 +40,7 @@ struct params {
     /* Box parameters */
     int GridSize;
     double BoxLen;
-    int CubeRootNumber;
+    long long int CubeRootNumber;
     long long int NumPartGenerate;
     long long int FirstID;
     char *GaussianRandomFieldFile;
