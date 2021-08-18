@@ -923,7 +923,7 @@ int main(int argc, char *argv[]) {
 
     char out_fname[200];
     sprintf(out_fname, "%s/%s", pars.OutputDirectory, pars.OutputFilename);
-    message(rank, "Writing output to %s.\n", out_fname);
+    message(rank, "Creating datasets in %s.\n", out_fname);
 
     if (rank == 0) {
         /* Create the output file */
@@ -992,6 +992,8 @@ int main(int argc, char *argv[]) {
     /* Ensure that all nodes are at the final time step */
     double a_min;
     MPI_Allreduce(&a, &a_min, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    
+    message(rank, "Writing output to %s.\n", out_fname);
 
     /* Now open the file in parallel mode */
     hid_t h_out_file = openFile_MPI(MPI_COMM_WORLD, out_fname);
