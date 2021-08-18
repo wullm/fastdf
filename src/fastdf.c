@@ -923,7 +923,6 @@ int main(int argc, char *argv[]) {
 
     char out_fname[200];
     sprintf(out_fname, "%s/%s", pars.OutputDirectory, pars.OutputFilename);
-    message(rank, "Creating datasets in %s.\n", out_fname);
 
     if (rank == 0) {
         /* Create the output file */
@@ -1047,11 +1046,15 @@ int main(int argc, char *argv[]) {
         ids[i] = firstID + i;
     }
 
+    message(rank, "Writing Coordinates.\n");
+
     /* Write coordinate data (vector) */
     h_data = H5Dopen(h_grp, "Coordinates", H5P_DEFAULT);
     H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_vspace, h_vspace, H5P_DEFAULT, coords);
     H5Dclose(h_data);
     free(coords);
+
+    message(rank, "Writing Velocities.\n");
 
     /* Write velocity data (vector) */
     h_data = H5Dopen(h_grp, "Velocities", H5P_DEFAULT);
@@ -1059,17 +1062,23 @@ int main(int argc, char *argv[]) {
     H5Dclose(h_data);
     free(vels);
 
+    message(rank, "Writing Masses.\n");
+
     /* Write mass data (scalar) */
     h_data = H5Dopen(h_grp, "Masses", H5P_DEFAULT);
     H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_sspace, h_sspace, H5P_DEFAULT, masses);
     H5Dclose(h_data);
     free(masses);
 
+    message(rank, "Writing ParticleIDs.\n");
+
     /* Write particle id data (scalar) */
     h_data = H5Dopen(h_grp, "ParticleIDs", H5P_DEFAULT);
     H5Dwrite(h_data, H5T_NATIVE_LLONG, h_ch_sspace, h_sspace, H5P_DEFAULT, ids);
     H5Dclose(h_data);
     free(ids);
+
+    message(rank, "Done with writing on rank 0.\n");
 
     /* Close the chunk-sized scalar and vector dataspaces */
     H5Sclose(h_ch_vspace);
