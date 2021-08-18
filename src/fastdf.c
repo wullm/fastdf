@@ -952,24 +952,34 @@ int main(int argc, char *argv[]) {
         const hsize_t sdims[1] = {pars.NumPartGenerate};
         hid_t h_sspace = H5Screate_simple(srank, sdims, NULL);
 
+        /* Set chunking for vectors */
+        hid_t h_prop_vec = H5Pcreate(H5P_DATASET_CREATE);
+        const hsize_t vchunk[2] = {HDF5_CHUNK_SIZE, 3};
+        H5Pset_chunk(h_prop_vec, vrank, vchunk);
+
+        /* Set chunking for scalars */
+        hid_t h_prop_sca = H5Pcreate(H5P_DATASET_CREATE);
+        const hsize_t schunk[1] = {HDF5_CHUNK_SIZE};
+        H5Pset_chunk(h_prop_sca, srank, schunk);
+
         /* Create the particle group in the output file */
         printf("Creating Group '%s' with %lld particles.\n", ExportName, pars.NumPartGenerate);
         h_grp = H5Gcreate(h_out_file, ExportName, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
         /* Coordinates (use vector space) */
-        h_data = H5Dcreate(h_grp, "Coordinates", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        h_data = H5Dcreate(h_grp, "Coordinates", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, h_prop_vec, H5P_DEFAULT);
         H5Dclose(h_data);
 
         /* Velocities (use vector space) */
-        h_data = H5Dcreate(h_grp, "Velocities", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        h_data = H5Dcreate(h_grp, "Velocities", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, h_prop_vec, H5P_DEFAULT);
         H5Dclose(h_data);
 
         /* Masses (use scalar space) */
-        h_data = H5Dcreate(h_grp, "Masses", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        h_data = H5Dcreate(h_grp, "Masses", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
 
         /* Particle IDs (use scalar space) */
-        h_data = H5Dcreate(h_grp, "ParticleIDs", H5T_NATIVE_LLONG, h_sspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        h_data = H5Dcreate(h_grp, "ParticleIDs", H5T_NATIVE_LLONG, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
 
         /* Close the group */

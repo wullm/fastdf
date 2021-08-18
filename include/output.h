@@ -35,5 +35,7 @@ int writeFieldData(const double *box, hid_t h_file);
 
 /* The current limit of for parallel HDF5 writes is 2GB */
 #define HDF5_PARALLEL_LIMIT 2147000000LL
+/* The default chunk size, corresponding to ~1 MB */
+#define HDF5_CHUNK_SIZE 32768
 
 #endif
