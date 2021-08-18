@@ -1016,7 +1016,7 @@ int main(int argc, char *argv[]) {
 
     /* Create vector & scalar datapsace for smaller chunks of data */
     const hsize_t ch_vdims[2] = {localParticleNumber, 3};
-    const hsize_t ch_sdims[2] = {localParticleNumber};
+    const hsize_t ch_sdims[1] = {localParticleNumber};
     hid_t h_ch_vspace = H5Screate_simple(vrank, ch_vdims, NULL);
     hid_t h_ch_sspace = H5Screate_simple(srank, ch_sdims, NULL);
 
