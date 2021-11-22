@@ -733,9 +733,13 @@ int main(int argc, char *argv[]) {
             double z_end = 1./cosmo.a_end - 1;
             double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
 
-            double a2 = cosmo.a_end * 1.001;
-            double z2 =  1./a2 - 1;
-            double log_tau2 = perturbLogTauAtRedshift(&spline, z2);
+            /* Central difference */
+            double a_min = cosmo.a_end / 1.001;
+            double z_min =  1./a_min - 1;
+            double log_tau_min = perturbLogTauAtRedshift(&spline, z_min);
+            double a_plus = cosmo.a_end * 1.001;
+            double z_plus =  1./a_plus - 1;
+            double log_tau_plus = perturbLogTauAtRedshift(&spline, z_plus);
 
             /* Find the interpolation index along the time dimension */
             int tau_index; //greatest lower bound bin index
@@ -784,22 +788,26 @@ int main(int argc, char *argv[]) {
             free(fbox_etadot);
 
             /* Compute the conformal time derivative of the background density */
-            double Omega_nu1 = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
-            double Omega_nu2 = perturbDensityAtLogTau(&spline, log_tau2, index_ncdm);
+            double Omega_nu = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
+            double Omega_nu_min = perturbDensityAtLogTau(&spline, log_tau_min, index_ncdm);
+            double Omega_nu_plus = perturbDensityAtLogTau(&spline, log_tau_plus, index_ncdm);
 
-            double H1 = perturbHubbleAtLogTau(&spline, log_tau_end);
-            double H2 = perturbHubbleAtLogTau(&spline, log_tau2);
+            double H = perturbHubbleAtLogTau(&spline, log_tau_end);
+            double H_min = perturbHubbleAtLogTau(&spline, log_tau_min);
+            double H_plus = perturbHubbleAtLogTau(&spline, log_tau_plus);
 
             double H_0 = cosmo.H_0;
-            double rho_crit1 = cosmo.rho_crit * (H1 * H1) / (H_0 * H_0);
-            double rho_crit2 = cosmo.rho_crit * (H2 * H2) / (H_0 * H_0);
+            double rho_crit = cosmo.rho_crit * (H * H) / (H_0 * H_0);
+            double rho_crit_min = cosmo.rho_crit * (H_min * H_min) / (H_0 * H_0);
+            double rho_crit_plus = cosmo.rho_crit * (H_plus * H_plus) / (H_0 * H_0);
 
-            double rho_nu1 = Omega_nu1 * rho_crit1;
-            double rho_nu2 = Omega_nu2 * rho_crit2;
+            double rho_nu = Omega_nu * rho_crit;
+            double rho_nu_min = Omega_nu_min * rho_crit_min;
+            double rho_nu_plus = Omega_nu_plus * rho_crit_plus;
 
-            double dtau = exp(log_tau2) - exp(log_tau_end);
-            double rho_dot = (rho_nu2 - rho_nu1) / dtau;
-            double rho_dot_rho = rho_dot / rho_nu1;
+            double dtau = exp(log_tau_plus) - exp(log_tau_min);
+            double rho_dot = (rho_nu_plus - rho_nu_min) / dtau;
+            double rho_dot_rho = rho_dot / rho_nu;
             double rho_dot_rho_c4 = rho_dot_rho / (c * c * c * c);
 
             /* Compute the total density gauge shift */
