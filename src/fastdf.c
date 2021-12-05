@@ -121,6 +121,13 @@ int main(int argc, char *argv[]) {
     message(rank, "a_begin = %.3e (z = %.2f)\n", cosmo.a_begin, 1./cosmo.a_begin - 1);
     message(rank, "a_end = %.3e (z = %.2f)\n", cosmo.a_end, 1./cosmo.a_end - 1);
 
+    const char use_alternative_eom = pars.AlternativeEquations;
+    if (use_alternative_eom) {
+        message(rank, "\n\n");
+        message(rank, "WARNING: Using alternative equations of motion!");
+        message(rank, "\n\n");
+    }
+
     /* Read the Gaussian random field on each MPI rank */
     double *box;
     double BoxLen;
@@ -599,6 +606,15 @@ int main(int argc, char *argv[]) {
             double kick_phi = epsfac_inv * inv_c;
             double drift = epsfac_inv * (1.0 + psi_c2 + phi_c2) * c;
 
+            if (use_alternative_eom) {
+                /* Alternative drift */
+                drift = epsfac_inv * (1.0 + psi_c2 + phi_c2 * (2.0 - q2 * epsfac_inv * epsfac_inv)) * c;
+                /* Zero out the anti-symmetric term */
+                vac = 0.;
+                /* Zero out the potential derivative term */
+                phi_dot_c2 = 0;
+            }
+
             /* Execute first gradient term */
             p->v[0] -= acc_psi[0] * kick_psi * dtau1;
             p->v[1] -= acc_psi[1] * kick_psi * dtau1;
@@ -659,6 +675,13 @@ int main(int argc, char *argv[]) {
             /* Compute kick factors */
             double kick_psi = epsfac * inv_c;
             double kick_phi = epsfac_inv * inv_c;
+
+            if (use_alternative_eom) {
+                /* Zero out the anti-symmetric term */
+                vac = 0.;
+                /* Zero out the potential derivative term */
+                phi_dot_c2 = 0;
+            }
 
             /* Execute first gradient term */
             p->v[0] -= acc_psi[0] * kick_psi * dtau2;

@@ -39,6 +39,8 @@ int readParams(struct params *pars, const char *fname) {
      pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname); 
      pars->InvertField = ini_getd("Box", "InvertField", 0, fname);
 
+     pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
+
      pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
 
      /* Read strings */

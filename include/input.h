@@ -57,6 +57,9 @@ struct params {
     double RecomputeTrigger;
     double RecomputeScaleRef;
 
+    /* Alternative Equation of Motion Mode */
+    char AlternativeEquations;
+
     /* Output parameters */
     char *OutputDirectory;
     char *OutputFilename;
