@@ -929,10 +929,10 @@ int main(int argc, char *argv[]) {
         /* Update the mass (needs to happen before converting the velocities!)*/
         double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
         double f = fermi_dirac_density(p_eV, T_eV);
-        double eps_eV = hypot(p_eV/a_end, m_eV);
-        double eps = particle_mass / m_eV * eps_eV;
+        //double eps_eV = hypot(p_eV/a_end, m_eV);
+        //double eps = particle_mass / m_eV * eps_eV;
         double w = (p->f_i - f)/p->f_i;
-        p->mass = eps * w;
+        p->mass = particle_mass * w;
 
         /* Convert momenta to velocities */
         p->v[0] *= c / m_eV;
@@ -1008,6 +1008,10 @@ int main(int argc, char *argv[]) {
         h_data = H5Dcreate(h_grp, "Masses", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
 
+        /* Neutrino (delta-f) weights (use scalar space) */
+        h_data = H5Dcreate(h_grp, "NeutrinoWeights", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
+        H5Dclose(h_data);
+
         /* Particle IDs (use scalar space) */
         h_data = H5Dcreate(h_grp, "ParticleIDs", H5T_NATIVE_LLONG, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
@@ -1065,6 +1069,7 @@ int main(int argc, char *argv[]) {
     double *coords = malloc(3 * localParticleNumber * sizeof(double));
     double *vels = malloc(3 * localParticleNumber * sizeof(double));
     double *masses = malloc(1 * localParticleNumber * sizeof(double));
+    double *weights = malloc(1 * localParticleNumber * sizeof(double));
     long long *ids = malloc(1 * localParticleNumber * sizeof(long long));
     for (long long i=0; i<localParticleNumber; i++) {
         coords[i * 3 + 0] = genparts[i].x[0];
@@ -1073,7 +1078,8 @@ int main(int argc, char *argv[]) {
         vels[i * 3 + 0] = genparts[i].v[0];
         vels[i * 3 + 1] = genparts[i].v[1];
         vels[i * 3 + 2] = genparts[i].v[2];
-        masses[i] = genparts[i].mass;
+        masses[i] = particle_mass;
+        weights[i] = genparts[i].mass / particle_mass;
         ids[i] = firstID + i;
     }
 
@@ -1100,6 +1106,14 @@ int main(int argc, char *argv[]) {
     H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_sspace, h_sspace, H5P_DEFAULT, masses);
     H5Dclose(h_data);
     free(masses);
+
+    message(rank, "Writing NeutrinoWeights.\n");
+
+    /* Write mass data (scalar) */
+    h_data = H5Dopen(h_grp, "NeutrinoWeights", H5P_DEFAULT);
+    H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_sspace, h_sspace, H5P_DEFAULT, weights);
+    H5Dclose(h_data);
+    free(weights);
 
     message(rank, "Writing ParticleIDs.\n");
 
