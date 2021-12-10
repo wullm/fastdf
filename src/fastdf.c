@@ -281,6 +281,61 @@ int main(int argc, char *argv[]) {
 
     message(rank, "ID of first particle = %lld\n", firstID);
     message(rank, "T_nu = %e eV\n", T_eV);
+    
+    /* Make a table of the total distance travelled along an unperturbed
+     * geodesic as a function of initial momentum, i.e. the integral between
+     * a_begin and a_end of dtau * c * v / sqrt(v^2 + m^a^2). */
+    int interp_table_len = 1000;
+    double *x_of_v = malloc(interp_table_len * sizeof(double));
+    double v_min = 0;
+    double v_max = 30.0 * T_eV; 
+    for (int i = 0; i < interp_table_len; i++) {
+        /* The velocity */
+        double v = v_min + i * (v_max - v_min) / interp_table_len;
+        
+        /* The time stepping */
+        double a_begin = cosmo.a_begin;
+        double a_end = cosmo.a_end;
+        double a_factor = 1.0 + pars.ScaleFactorStep;
+        int steps = (log(a_end) - log(a_begin))/log(a_factor) + 1;
+        
+        /* Start at the beginning */
+        double a = a_begin;
+        double x = 0;
+                
+        /* Integrate to the final time */
+        for (int j = 0; j < steps; j++) {
+            /* Determine the next scale factor */
+            double a_next;
+            if (j == 0) {
+                a_next = a; //start with a step that does nothing
+            } else if (j < steps - 1) {
+                a_next = a * a_factor;
+            } else {
+                a_next = a_end;
+            }
+
+            /* Compute the current redshift and log conformal time */
+            double z = 1./a - 1.;
+            double log_tau = perturbLogTauAtRedshift(&spline, z);
+
+            /* Find the next and half-step conformal times */
+            double z_next = 1./a_next - 1.;
+            double log_tau_next = perturbLogTauAtRedshift(&spline, z_next);
+            double dtau = exp(log_tau_next) - exp(log_tau);
+            
+            /* Drift */
+            double epsfac = hypot(v, a * m_eV);
+            x += v * dtau * c / epsfac; 
+            
+            /* Step forward */
+            a = a_next;
+        }
+        
+        /* Store the result */
+        x_of_v[i] = x;
+    }
+
 
     /* Generate random neutrino particles */
     for (long long i=0; i<localParticleNumber; i++) {
@@ -330,7 +385,58 @@ int main(int argc, char *argv[]) {
         p->v_i[1] = p->v[1];
         p->v_i[2] = p->v[2];
         p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
+        
+        if (pars.CentralRadius) {        
+            /* Find the distance travelled from the interpolation table */
+            double ind = interp_table_len * (p->v_i_mag - v_min) / (v_max - v_min);
+            int j = (int) fmin(ind, interp_table_len - 2.0);
+            double v_near = v_min + j * (v_max - v_min) / interp_table_len;
+            double h = (p->v_i_mag - v_near) / (v_max - v_min) * interp_table_len;
+            double x = (1.0 - h) * x_of_v[j] + h * x_of_v[j + 1];
+            
+            /* Determine a desired final position using rejection sampling */
+            double center_sphere_ratio = pars.CentralRatio;
+            double center_sphere_radius = pars.CentralRadius;
+            double y = sampleUniform(&id);
+            if (y < center_sphere_ratio) {
+                int done = 0;
+                while (!done) {
+                    double u = 2.0 * sampleUniform(&id) - 1.0;
+                    double v = 2.0 * sampleUniform(&id) - 1.0;
+                    double w = 2.0 * sampleUniform(&id) - 1.0;
+                    if (hypot3(u,v,w) < 1.0) {
+                        p->x[0] = 0.5 * BoxLen + u * center_sphere_radius;
+                        p->x[1] = 0.5 * BoxLen + v * center_sphere_radius;
+                        p->x[2] = 0.5 * BoxLen + w * center_sphere_radius;
+                        done = 1;
+                    }
+                }
+            } else {
+                int done = 0;
+                while (!done) {
+                    double u = (sampleUniform(&id) - 0.5) * BoxLen;
+                    double v = (sampleUniform(&id) - 0.5) * BoxLen;
+                    double w = (sampleUniform(&id) - 0.5) * BoxLen;
+                    if (hypot3(u,v,w) >= center_sphere_radius) {
+                        p->x[0] = 0.5 * BoxLen + u;
+                        p->x[1] = 0.5 * BoxLen + v;
+                        p->x[2] = 0.5 * BoxLen + w;
+                        done = 1;
+                    }
+                }
+            }
+            
+            
+            /* Displace the particle so that it would end up at its desired final
+             * position if it travelled along an unperturbed geodesic. */
+            p->x[0] -= p->v[0] / p->v_i_mag * x;
+            p->x[1] -= p->v[1] / p->v_i_mag * x;
+            p->x[2] -= p->v[2] / p->v_i_mag * x;
+        }
     }
+
+    /* Free the distance travelled interpolation table */
+    free(x_of_v);
 
     /* Free the boxes used for the initial conditions */
     free(box_dic);

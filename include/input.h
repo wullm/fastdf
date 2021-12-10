@@ -57,6 +57,11 @@ struct params {
     double RecomputeTrigger;
     double RecomputeScaleRef;
 
+    /* Backward mode parameters */
+    char BackwardMode;
+    double CentralRatio;
+    double CentralRadius;
+
     /* Alternative Equation of Motion Mode */
     char AlternativeEquations;
 

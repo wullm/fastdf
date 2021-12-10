@@ -42,6 +42,11 @@ int readParams(struct params *pars, const char *fname) {
      pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
 
      pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
+     
+     
+     pars->BackwardMode = ini_getl("Simulation", "BackwardMode", 0, fname);
+     pars->CentralRatio = ini_getd("Simulation", "CentralRatio", 0.0, fname);
+     pars->CentralRadius = ini_getd("Simulation", "CentralRadius", 0.0, fname);
 
      /* Read strings */
      int len = DEFAULT_STRING_LENGTH;
