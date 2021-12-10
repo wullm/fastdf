@@ -386,7 +386,7 @@ int main(int argc, char *argv[]) {
         p->v_i[2] = p->v[2];
         p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
         
-        if (pars.CentralRadius) {        
+        if (pars.BackwardMode) {        
             /* Find the distance travelled from the interpolation table */
             double ind = interp_table_len * (p->v_i_mag - v_min) / (v_max - v_min);
             int j = (int) fmin(ind, interp_table_len - 2.0);
