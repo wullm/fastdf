@@ -61,6 +61,7 @@ struct params {
     char BackwardMode;
     double CentralRatio;
     double CentralRadius;
+    double ScaleFactorTarget;
 
     /* Alternative Equation of Motion Mode */
     char AlternativeEquations;

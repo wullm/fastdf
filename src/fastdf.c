@@ -295,7 +295,7 @@ int main(int argc, char *argv[]) {
         
         /* The time stepping */
         double a_begin = cosmo.a_begin;
-        double a_end = cosmo.a_end;
+        double a_end = pars.ScaleFactorTarget;
         double a_factor = 1.0 + pars.ScaleFactorStep;
         int steps = (log(a_end) - log(a_begin))/log(a_factor) + 1;
         

@@ -47,6 +47,7 @@ int readParams(struct params *pars, const char *fname) {
      pars->BackwardMode = ini_getl("Simulation", "BackwardMode", 0, fname);
      pars->CentralRatio = ini_getd("Simulation", "CentralRatio", 0.0, fname);
      pars->CentralRadius = ini_getd("Simulation", "CentralRadius", 0.0, fname);
+     pars->ScaleFactorTarget = ini_getd("Simulation", "ScaleFactorTarget", 1.0, fname);
 
      /* Read strings */
      int len = DEFAULT_STRING_LENGTH;
