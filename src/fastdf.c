@@ -1115,7 +1115,7 @@ int main(int argc, char *argv[]) {
         H5Dclose(h_data);
 
         /* Neutrino (delta-f) weights (use scalar space) */
-        h_data = H5Dcreate(h_grp, "NeutrinoWeights", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
+        h_data = H5Dcreate(h_grp, "Weights", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
 
         /* Particle IDs (use scalar space) */
@@ -1213,10 +1213,10 @@ int main(int argc, char *argv[]) {
     H5Dclose(h_data);
     free(masses);
 
-    message(rank, "Writing NeutrinoWeights.\n");
+    message(rank, "Writing Weights.\n");
 
     /* Write mass data (scalar) */
-    h_data = H5Dopen(h_grp, "NeutrinoWeights", H5P_DEFAULT);
+    h_data = H5Dopen(h_grp, "Weights", H5P_DEFAULT);
     H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_sspace, h_sspace, H5P_DEFAULT, weights);
     H5Dclose(h_data);
     free(weights);
