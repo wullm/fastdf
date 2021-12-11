@@ -397,6 +397,10 @@ int main(int argc, char *argv[]) {
             /* Determine a desired final position using rejection sampling */
             double center_sphere_ratio = pars.CentralRatio;
             double center_sphere_radius = pars.CentralRadius;
+            double central_volume = 4.0 * M_PI / 3.0 * center_sphere_radius *
+                                    center_sphere_radius * center_sphere_radius;
+            double total_volume = BoxLen * BoxLen * BoxLen;
+            double outer_volume = total_volume - central_volume;
             double y = sampleUniform(&id);
             if (y < center_sphere_ratio) {
                 int done = 0;
@@ -411,6 +415,7 @@ int main(int argc, char *argv[]) {
                         done = 1;
                     }
                 }
+                p->mass = particle_mass * central_volume / (total_volume * center_sphere_ratio);
             } else {
                 int done = 0;
                 while (!done) {
@@ -424,6 +429,7 @@ int main(int argc, char *argv[]) {
                         done = 1;
                     }
                 }
+                p->mass = particle_mass * outer_volume / (total_volume * (1.0 - center_sphere_ratio));
             }
             
             
@@ -1023,6 +1029,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Final operations before writing the particles to disk */
+    double *weights = malloc(1 * localParticleNumber * sizeof(double));
     #pragma omp parallel for
     for (long long i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
@@ -1035,10 +1042,11 @@ int main(int argc, char *argv[]) {
         /* Update the mass (needs to happen before converting the velocities!)*/
         double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
         double f = fermi_dirac_density(p_eV, T_eV);
+        double w = (p->f_i - f)/p->f_i;
         //double eps_eV = hypot(p_eV/a_end, m_eV);
         //double eps = particle_mass / m_eV * eps_eV;
-        double w = (p->f_i - f)/p->f_i;
-        p->mass = particle_mass * w;
+        // p->mass = particle_mass * w;
+        weights[i] = w;
 
         /* Convert momenta to velocities */
         p->v[0] *= c / m_eV;
@@ -1175,7 +1183,6 @@ int main(int argc, char *argv[]) {
     double *coords = malloc(3 * localParticleNumber * sizeof(double));
     double *vels = malloc(3 * localParticleNumber * sizeof(double));
     double *masses = malloc(1 * localParticleNumber * sizeof(double));
-    double *weights = malloc(1 * localParticleNumber * sizeof(double));
     long long *ids = malloc(1 * localParticleNumber * sizeof(long long));
     for (long long i=0; i<localParticleNumber; i++) {
         coords[i * 3 + 0] = genparts[i].x[0];
@@ -1184,8 +1191,8 @@ int main(int argc, char *argv[]) {
         vels[i * 3 + 0] = genparts[i].v[0];
         vels[i * 3 + 1] = genparts[i].v[1];
         vels[i * 3 + 2] = genparts[i].v[2];
-        masses[i] = particle_mass;
-        weights[i] = genparts[i].mass / particle_mass;
+        masses[i] = genparts[i].mass;
+        // weights[i] = genparts[i].mass / particle_mass;
         ids[i] = firstID + i;
     }
 
