@@ -354,44 +354,13 @@ int main(int argc, char *argv[]) {
         if (i==0)
         message(rank, "First random momentum = %e eV\n", p_eV);
 
-        /* Determine the density perturbation at this point */
-        double dnu = gridCIC(box_dic, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-
-        /* The local temperature perturbation dT/T */
-        double deltaT = dnu/4;
-
-        /* Determine the initial velocity perturbation at this point */
-        double vel[3];
-        accelCIC(box_tic, N, BoxLen, p->x, vel);
-
-        /* Apply the perturbation */
-        p->v[0] *= 1.0 + deltaT;
-        p->v[1] *= 1.0 + deltaT;
-        p->v[2] *= 1.0 + deltaT;
-
-        /* The current energy */
-        double eps_eV = hypot(p_eV/cosmo.a_begin, m_eV);
-
-        /* Apply the velocity perturbation */
-        p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_begin;
-        p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_begin;
-        p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_begin;
-
-        /* Compute initial phase space density */
-        p->f_i = f_i;
-
-        /* Compute the magnitude of the initial velocity */
-        p->v_i[0] = p->v[0];
-        p->v_i[1] = p->v[1];
-        p->v_i[2] = p->v[2];
-        p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
-        
         if (pars.BackwardMode) {        
             /* Find the distance travelled from the interpolation table */
-            double ind = interp_table_len * (p->v_i_mag - v_min) / (v_max - v_min);
+            double v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
+            double ind = interp_table_len * (v_i_mag - v_min) / (v_max - v_min);
             int j = (int) fmin(ind, interp_table_len - 2.0);
             double v_near = v_min + j * (v_max - v_min) / interp_table_len;
-            double h = (p->v_i_mag - v_near) / (v_max - v_min) * interp_table_len;
+            double h = (v_i_mag - v_near) / (v_max - v_min) * interp_table_len;
             double x = (1.0 - h) * x_of_v[j] + h * x_of_v[j + 1];
             
             /* Determine a desired final position using rejection sampling */
@@ -435,10 +404,42 @@ int main(int argc, char *argv[]) {
             
             /* Displace the particle so that it would end up at its desired final
              * position if it travelled along an unperturbed geodesic. */
-            p->x[0] -= p->v[0] / p->v_i_mag * x;
-            p->x[1] -= p->v[1] / p->v_i_mag * x;
-            p->x[2] -= p->v[2] / p->v_i_mag * x;
+            p->x[0] -= p->v[0] / v_i_mag * x;
+            p->x[1] -= p->v[1] / v_i_mag * x;
+            p->x[2] -= p->v[2] / v_i_mag * x;
         }
+
+        /* Determine the density perturbation at this point */
+        double dnu = gridCIC(box_dic, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+
+        /* The local temperature perturbation dT/T */
+        double deltaT = dnu/4;
+
+        /* Determine the initial velocity perturbation at this point */
+        double vel[3];
+        accelCIC(box_tic, N, BoxLen, p->x, vel);
+
+        /* Apply the perturbation */
+        p->v[0] *= 1.0 + deltaT;
+        p->v[1] *= 1.0 + deltaT;
+        p->v[2] *= 1.0 + deltaT;
+
+        /* The current energy */
+        double eps_eV = hypot(p_eV/cosmo.a_begin, m_eV);
+
+        /* Apply the velocity perturbation */
+        p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_begin;
+        p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_begin;
+        p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_begin;
+
+        /* Compute initial phase space density */
+        p->f_i = f_i;
+
+        /* Compute the magnitude of the initial velocity */
+        p->v_i[0] = p->v[0];
+        p->v_i[1] = p->v[1];
+        p->v_i[2] = p->v[2];
+        p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
     }
 
     /* Free the distance travelled interpolation table */
