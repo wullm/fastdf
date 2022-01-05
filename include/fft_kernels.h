@@ -211,11 +211,17 @@ struct power_spectrum {
 static inline void kernel_power_no_transfer(struct kernel *the_kernel) {
     const struct power_spectrum *ps = (const struct power_spectrum *) the_kernel->params;
     double k = the_kernel->k;
-    double A_s = ps->A_s;
-    double n_s = ps->n_s;
-    double k_pivot = ps->k_pivot;
-    double Pk = A_s * pow(k/k_pivot, n_s - 1.) * k * (2. * M_PI * M_PI);
-    the_kernel->kern = sqrt(Pk);
+
+    /* Catch the DC mode */
+    if (k == 0) {
+        the_kernel->kern = 0.;
+    } else {
+        double A_s = ps->A_s;
+        double n_s = ps->n_s;
+        double k_pivot = ps->k_pivot;
+        double Pk = A_s * pow(k/k_pivot, n_s - 1.) * k * (2. * M_PI * M_PI);
+        the_kernel->kern = sqrt(Pk);
+    }
 }
 
 #endif
