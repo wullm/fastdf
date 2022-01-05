@@ -114,7 +114,7 @@ int main(int argc, char *argv[]) {
         message(rank, "Output gauge: N-body\n");
         gauge_Nbody = 1;
     } else {
-        message(rank, "Error: unknown output gauge '%s'.\n", pars.Gauge);
+        printf("Error: unknown output gauge '%s'.\n", pars.Gauge);
         exit(1);
     }
 
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
     char *title = pars.TransferFunctionDensity;
     int index_src = findTitle(ptdat.titles, title, ptdat.n_functions);
     if (index_src < 0) {
-        message(rank, "Error: transfer function '%s' not found (%d).\n", title, index_src);
+        printf("Error: transfer function '%s' not found (%d).\n", title, index_src);
         return 1;
     }
 
@@ -180,7 +180,7 @@ int main(int argc, char *argv[]) {
         int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
         if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 ||
             index_ncdm < 0 || index_HTNbp < 0) {
-            message(rank, "Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
+            printf("Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
             return 1;
         }
     }
@@ -224,7 +224,7 @@ int main(int argc, char *argv[]) {
 
     /* Check that we are not exceeding the HDF5 parallel write limit */
     if (localParticleNumber * 3 * sizeof(double) > HDF5_PARALLEL_LIMIT) {
-        message(rank, "\nError: Exceeding 2GB limit on parallel HDF5 writes. Increase the number of MPI tasks.\n");
+        printf("\nError: Exceeding 2GB limit on parallel HDF5 writes. Increase the number of MPI tasks.\n");
         exit(1);
     }
 
@@ -257,7 +257,7 @@ int main(int argc, char *argv[]) {
         /* The indices of the potential transfer function */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
         if (index_psi < 0) {
-            message(rank, "Error: transfer function '%s' not found (%d).\n", "psi", index_psi);
+            printf("Error: transfer function '%s' not found (%d).\n", "psi", index_psi);
             return 1;
         }
 
@@ -466,7 +466,7 @@ int main(int argc, char *argv[]) {
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
         int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
         if (index_psi < 0 || index_phi < 0) {
-            message(rank, "Error: transfer function '%s' or '%s' not found (%d, %d).\n", "psi", "phi", index_psi, index_phi);
+            printf("Error: transfer function '%s' or '%s' not found (%d, %d).\n", "psi", "phi", index_psi, index_phi);
             return 1;
         }
 
@@ -793,7 +793,7 @@ int main(int argc, char *argv[]) {
             int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
             if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 ||
                 index_ncdm < 0 || index_HTNbp < 0) {
-                message(rank, "Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
+                printf("Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
                 return 1;
             }
 
