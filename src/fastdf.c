@@ -118,22 +118,6 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    /* If we are outputting in N-body gauge, check that all the necessary
-     * transfer functions are there before doing the integrtion. */
-    if (gauge_Nbody) {
-        /* The indices of the necessary transfer function */
-        int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
-        int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
-        int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
-        int index_ncdm = findTitle(ptdat.titles, title, ptdat.n_functions);
-        int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
-        if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 ||
-            index_ncdm < 0 || index_HTNbp < 0) {
-            message(rank, "Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
-            return 1;
-        }
-    }
-
     message(rank, "a_begin = %.3e (z = %.2f)\n", cosmo.a_begin, 1./cosmo.a_begin - 1);
     message(rank, "a_end = %.3e (z = %.2f)\n", cosmo.a_end, 1./cosmo.a_end - 1);
 
@@ -183,6 +167,22 @@ int main(int argc, char *argv[]) {
     if (index_src < 0) {
         message(rank, "Error: transfer function '%s' not found (%d).\n", title, index_src);
         return 1;
+    }
+
+    /* If we are outputting in N-body gauge, check that all the necessary
+     * transfer functions are there before doing the integrtion. */
+    if (gauge_Nbody) {
+        /* The indices of the necessary transfer function */
+        int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
+        int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
+        int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
+        int index_ncdm = findTitle(ptdat.titles, title, ptdat.n_functions);
+        int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
+        if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 ||
+            index_ncdm < 0 || index_HTNbp < 0) {
+            message(rank, "Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
+            return 1;
+        }
     }
 
     /* The index of the present day, corresponds to the last index in the array */
@@ -1042,7 +1042,7 @@ int main(int argc, char *argv[]) {
     /* Ensure that all nodes are at the final time step */
     double a_min;
     MPI_Allreduce(&a, &a_min, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-    
+
     message(rank, "Writing output to %s.\n", out_fname);
 
     /* Now open the file in parallel mode */
