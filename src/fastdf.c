@@ -150,6 +150,23 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    /* Compute the mean of the input field */
+    double mean = 0.;
+    for (int i=0; i<N*N*N; i++) {
+        mean += box[i];
+    }
+    mean /= (double) (N*N*N);
+
+    /* Compute the variance of the input field */
+    double var = 0.;
+    for (int i=0; i<N*N*N; i++) {
+        var += (box[i] - mean) * (box[i] - mean);
+    }
+    var /= (double) (N*N*N);
+
+    message(rank, "Mean = %.10g\n", mean);
+    message(rank, "Variance = %.10g\n", var);
+
     /* Fourier transform the Gaussian random field */
     fftw_complex *fbox = malloc(N*N*N*sizeof(fftw_complex));
     fftw_complex *fgrf = malloc(N*N*N*sizeof(fftw_complex));
@@ -157,6 +174,66 @@ int main(int argc, char *argv[]) {
     fft_execute(r2c);
     fft_normalize_r2c(fbox, N, BoxLen);
     fftw_destroy_plan(r2c);
+
+    /* Do we want to normalize the Gaussian field? */
+    if (pars.NormalizeGaussianField) {
+        message(rank, "\nNormalizing the input field.\n");
+
+        /* First set the variance of the field to 1.0 */
+        double sdev = sqrt(var);
+        for (int x=0; x<N; x++) {
+            for (int y=0; y<N; y++) {
+                for (int z=0; z<=N/2; z++) {
+                    fbox[row_major_half(x,y,z,N)] /= sdev;
+                }
+            }
+        }
+
+        /* Next, apply the correct normalization */
+        const double norm = pow(N / BoxLen, 1.5);
+        message(rank, "Normalizing by %g.\n", norm);
+
+        for (int x=0; x<N; x++) {
+            for (int y=0; y<N; y++) {
+                for (int z=0; z<=N/2; z++) {
+                  fbox[row_major_half(x,y,z,N)] *= norm;
+                }
+            }
+        }
+    }
+
+    /* Do we want to correct the Monofonic normalization? */
+    if (pars.AssumeMonofonicNormalization) {
+        message(rank, "\nUndoing the monofonIC normalization.\n");
+
+        /* Next, apply the correct normalization */
+        const double norm = pow(cosmo.h / (2.0 * M_PI), 1.5);
+        message(rank, "Normalizing by %g.\n", norm);
+
+        for (int x=0; x<N; x++) {
+            for (int y=0; y<N; y++) {
+                for (int z=0; z<=N/2; z++) {
+                  fbox[row_major_half(x,y,z,N)] *= norm;
+                }
+            }
+        }
+    }
+
+    /* Do we need to apply the primordial power spectrum? */
+    if (pars.NormalizeGaussianField || pars.AssumeMonofonicNormalization) {
+        struct power_spectrum ps;
+        ps.A_s = pars.PrimordialScalarAmplitude;
+        ps.n_s = pars.PrimordialSpectralIndex;
+        ps.k_pivot = pars.PrimordialPivotScale;
+
+        message(rank, "\nApplying primodial power spectrum with\n");
+        message(rank, "A_s = %.5e\n", ps.A_s);
+        message(rank, "n_s = %.5g\n", ps.n_s);
+        message(rank, "k_pivot = %.5g\n", ps.k_pivot);
+
+        /* Apply the bare power spectrum to fbox */
+        fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_power_no_transfer, &ps);
+    }
 
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
