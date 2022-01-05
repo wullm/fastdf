@@ -134,9 +134,10 @@ int main(int argc, char *argv[]) {
     int N;
 
     header(rank, "Random phases");
-    message(rank, "Reading Gaussian random field from %s.\n", pars.GaussianRandomFieldFile);
+    message(rank, "Reading Gaussian random field from %s (dataset %s).\n", pars.GaussianRandomFieldFile, pars.GaussianRandomFieldDataset);
 
-    readFieldFile(&box, &N, &BoxLen, pars.GaussianRandomFieldFile);
+    readFieldFileDataSet(&box, &N, &BoxLen, pars.GaussianRandomFieldFile, pars.GaussianRandomFieldDataset);
+    // readFieldFile(&box, &N, &BoxLen, pars.GaussianRandomFieldFile);
     // readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.GaussianRandomFieldFile);
 
     message(rank, "BoxLen = %.2f U_L\n", BoxLen);

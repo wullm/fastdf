@@ -44,6 +44,7 @@ struct params {
     long long int NumPartGenerate;
     long long int FirstID;
     char *GaussianRandomFieldFile;
+    char *GaussianRandomFieldDataset;
     char InvertField;
 
     /* Parameters of the primordial power spectrum (optional) */
@@ -100,6 +101,8 @@ int readUnits(struct units *us, const char *fname);
 int cleanParams(struct params *parser);
 
 int readFieldFile(double **box, int *N, double *box_len, const char *fname);
+int readFieldFileDataSet(double **box, int *N, double *box_len,
+                         const char *fname, const char *dset_name);
 
 int readFieldFile_MPI(double **box, int *N, double *box_len, MPI_Comm comm,
                       const char *fname);
