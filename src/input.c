@@ -36,12 +36,19 @@ int readParams(struct params *pars, const char *fname) {
      pars->ScaleFactorStep = ini_getd("Simulation", "ScaleFactorStep", 0.05, fname);
      pars->RecomputeTrigger = ini_getd("Simulation", "RecomputeTrigger", 0.01, fname);
      pars->RecomputeScaleRef = ini_getd("Simulation", "RecomputeScaleRef", 0.0, fname);
-     pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname); 
+     pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname);
      pars->InvertField = ini_getd("Box", "InvertField", 0, fname);
 
      pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
 
      pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
+
+     /* Parameters of the primordial power spectrum (optional) */
+     pars->NormalizeGaussianField = ini_getl("PrimordialSpectrum", "NormalizeGaussianField", 0, fname);
+     pars->AssumeMonofonicNormalization = ini_getl("PrimordialSpectrum", "AssumeMonofonicNormalization", 0, fname);
+     pars->PrimordialScalarAmplitude = ini_getd("PrimordialSpectrum", "ScalarAmplitude", 2e-9, fname);
+     pars->PrimordialSpectralIndex = ini_getd("PrimordialSpectrum", "SpectralIndex", 0.96, fname);
+     pars->PrimordialPivotScale = ini_getd("PrimordialSpectrum", "PivotScale", 0.05, fname);
 
      /* Read strings */
      int len = DEFAULT_STRING_LENGTH;

@@ -46,6 +46,13 @@ struct params {
     char *GaussianRandomFieldFile;
     char InvertField;
 
+    /* Parameters of the primordial power spectrum (optional) */
+    char NormalizeGaussianField;
+    char AssumeMonofonicNormalization;
+    double PrimordialScalarAmplitude;
+    double PrimordialSpectralIndex;
+    double PrimordialPivotScale;
+
     /* Simulation parameters */
     char *Name;
     char *PerturbFile;
