@@ -358,28 +358,28 @@ int main(int argc, char *argv[]) {
 
     message(rank, "ID of first particle = %lld\n", firstID);
     message(rank, "T_nu = %e eV\n", T_eV);
-    
+
     /* Make a table of the total distance travelled along an unperturbed
      * geodesic as a function of initial momentum, i.e. the integral between
      * a_begin and a_end of dtau * c * v / sqrt(v^2 + m^a^2). */
     int interp_table_len = 1000;
     double *x_of_v = malloc(interp_table_len * sizeof(double));
     double v_min = 0;
-    double v_max = 30.0 * T_eV; 
+    double v_max = 30.0 * T_eV;
     for (int i = 0; i < interp_table_len; i++) {
         /* The velocity */
         double v = v_min + i * (v_max - v_min) / interp_table_len;
-        
+
         /* The time stepping */
         double a_begin = cosmo.a_begin;
         double a_end = pars.ScaleFactorTarget;
         double a_factor = 1.0 + pars.ScaleFactorStep;
         int steps = (log(a_end) - log(a_begin))/log(a_factor) + 1;
-        
+
         /* Start at the beginning */
         double a = a_begin;
         double x = 0;
-                
+
         /* Integrate to the final time */
         for (int j = 0; j < steps; j++) {
             /* Determine the next scale factor */
@@ -400,15 +400,15 @@ int main(int argc, char *argv[]) {
             double z_next = 1./a_next - 1.;
             double log_tau_next = perturbLogTauAtRedshift(&spline, z_next);
             double dtau = exp(log_tau_next) - exp(log_tau);
-            
+
             /* Drift */
             double epsfac = hypot(v, a * m_eV);
-            x += v * dtau * c / epsfac; 
-            
+            x += v * dtau * c / epsfac;
+
             /* Step forward */
             a = a_next;
         }
-        
+
         /* Store the result */
         x_of_v[i] = x;
     }
@@ -424,6 +424,9 @@ int main(int argc, char *argv[]) {
         /* Generate random particle velocity and position */
         init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
 
+        /* First set the mass to the mean particle mass */
+        p->mass = particle_mass;
+
         /* Compute the momentum in eV */
         const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
         const double f_i = fermi_dirac_density(p_eV, T_eV);
@@ -431,7 +434,7 @@ int main(int argc, char *argv[]) {
         if (i==0)
         message(rank, "First random momentum = %e eV\n", p_eV);
 
-        if (pars.BackwardMode) {        
+        if (pars.BackwardMode) {
             /* Find the distance travelled from the interpolation table */
             double v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
             double ind = interp_table_len * (v_i_mag - v_min) / (v_max - v_min);
@@ -439,7 +442,7 @@ int main(int argc, char *argv[]) {
             double v_near = v_min + j * (v_max - v_min) / interp_table_len;
             double h = (v_i_mag - v_near) / (v_max - v_min) * interp_table_len;
             double x = (1.0 - h) * x_of_v[j] + h * x_of_v[j + 1];
-            
+
             /* Determine a desired final position using rejection sampling */
             double center_sphere_ratio = pars.CentralRatio;
             double center_sphere_radius = pars.CentralRadius;
@@ -477,8 +480,8 @@ int main(int argc, char *argv[]) {
                 }
                 p->mass = particle_mass * outer_volume / (total_volume * (1.0 - center_sphere_ratio));
             }
-            
-            
+
+
             /* Displace the particle so that it would end up at its desired final
              * position if it travelled along an unperturbed geodesic. */
             p->x[0] -= p->v[0] / v_i_mag * x;
