@@ -993,6 +993,31 @@ int main(int argc, char *argv[]) {
         free(box_tshift);
     }
 
+    /* Free memory */
+    free(box);
+    free(fgrf);
+    free(fbox);
+
+    /* Compute energies, masses, and weights and store them in contiguous arrays */
+    double *energies = malloc(1 * localParticleNumber * sizeof(double));
+    double *masses = malloc(1 * localParticleNumber * sizeof(double));
+    double *weights = malloc(1 * localParticleNumber * sizeof(double));
+    for (long long i=0; i<localParticleNumber; i++) {
+        struct particle_ext *p = &genparts[i];
+
+        /* Compute the energy & weight (needs to happen before converting the velocities!)*/
+        double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+        double eps_eV = hypot(p_eV/a_end, m_eV);
+        double eps = particle_mass / m_eV * eps_eV;
+        double f = fermi_dirac_density(p_eV, T_eV);
+        double w = (p->f_i - f)/p->f_i;
+        // p->mass = particle_mass * w;
+
+        energies[i] = eps;
+        masses[i] = particle_mass;
+        weights[i] = w;
+    }
+
     /* Final operations before writing the particles to disk */
     #pragma omp parallel for
     for (long long i=0; i<localParticleNumber; i++) {
@@ -1002,14 +1027,6 @@ int main(int argc, char *argv[]) {
         p->x[0] = fwrap(p->x[0], BoxLen);
         p->x[1] = fwrap(p->x[1], BoxLen);
         p->x[2] = fwrap(p->x[2], BoxLen);
-
-        /* Update the mass (needs to happen before converting the velocities!)*/
-        double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
-        double f = fermi_dirac_density(p_eV, T_eV);
-        //double eps_eV = hypot(p_eV/a_end, m_eV);
-        //double eps = particle_mass / m_eV * eps_eV;
-        double w = (p->f_i - f)/p->f_i;
-        p->mass = particle_mass * w;
 
         /* Convert momenta to velocities */
         p->v[0] *= c / m_eV;
@@ -1021,11 +1038,6 @@ int main(int argc, char *argv[]) {
         p->v[1] /= a_end;
         p->v[2] /= a_end;
     }
-
-    /* Free memory */
-    free(box);
-    free(fgrf);
-    free(fbox);
 
     header(rank, "Prepare output");
 
@@ -1142,11 +1154,9 @@ int main(int argc, char *argv[]) {
     H5Sselect_hyperslab(h_vspace, H5S_SELECT_SET, vstart, NULL, ch_vdims, NULL);
     H5Sselect_hyperslab(h_sspace, H5S_SELECT_SET, sstart, NULL, ch_sdims, NULL);
 
-    /* Unpack particle data into contiguous arrays */
+    /* Unpack the remaining particle data into contiguous arrays */
     double *coords = malloc(3 * localParticleNumber * sizeof(double));
     double *vels = malloc(3 * localParticleNumber * sizeof(double));
-    double *masses = malloc(1 * localParticleNumber * sizeof(double));
-    double *weights = malloc(1 * localParticleNumber * sizeof(double));
     long long *ids = malloc(1 * localParticleNumber * sizeof(long long));
     for (long long i=0; i<localParticleNumber; i++) {
         coords[i * 3 + 0] = genparts[i].x[0];
@@ -1155,8 +1165,6 @@ int main(int argc, char *argv[]) {
         vels[i * 3 + 0] = genparts[i].v[0];
         vels[i * 3 + 1] = genparts[i].v[1];
         vels[i * 3 + 2] = genparts[i].v[2];
-        masses[i] = particle_mass;
-        weights[i] = genparts[i].mass / particle_mass;
         ids[i] = firstID + i;
     }
 
@@ -1186,11 +1194,19 @@ int main(int argc, char *argv[]) {
 
     message(rank, "Writing Weights.\n");
 
-    /* Write mass data (scalar) */
+    /* Write delta-f weight data (scalar) */
     h_data = H5Dopen(h_grp, "Weights", H5P_DEFAULT);
     H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_sspace, h_sspace, H5P_DEFAULT, weights);
     H5Dclose(h_data);
     free(weights);
+
+    message(rank, "Writing Energies.\n");
+
+    /* Write energy data (scalar) */
+    h_data = H5Dopen(h_grp, "Energies", H5P_DEFAULT);
+    H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_sspace, h_sspace, H5P_DEFAULT, energies);
+    H5Dclose(h_data);
+    free(energies);
 
     message(rank, "Writing ParticleIDs.\n");
 

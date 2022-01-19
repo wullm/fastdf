@@ -35,7 +35,7 @@ all:
 	$(GCC) src/mesh_grav.c -c -o lib/mesh_grav.o $(INCLUDES) $(CFLAGS)
 
 	$(GCC) src/fastdf.c -o fastdf $(INCLUDES) $(OBJECTS) $(LIBRARIES) $(CFLAGS) $(LDFLAGS)
-	$(GCC) src/gauge_shift.c -o gauge_shift $(INCLUDES) $(OBJECTS) $(LIBRARIES) $(CFLAGS) $(LDFLAGS)
+	#$(GCC) src/gauge_shift.c -o gauge_shift $(INCLUDES) $(OBJECTS) $(LIBRARIES) $(CFLAGS) $(LDFLAGS)
 
 minIni:
 	cd parser && make
