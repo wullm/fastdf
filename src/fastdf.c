@@ -1100,6 +1100,10 @@ int main(int argc, char *argv[]) {
         /* Neutrino (delta-f) weights (use scalar space) */
         h_data = H5Dcreate(h_grp, "Weights", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
+        
+        /* Energies (use scalar space) */
+        h_data = H5Dcreate(h_grp, "Energies", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
+        H5Dclose(h_data);
 
         /* Particle IDs (use scalar space) */
         h_data = H5Dcreate(h_grp, "ParticleIDs", H5T_NATIVE_LLONG, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
