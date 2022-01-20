@@ -198,6 +198,7 @@ int main(int argc, char *argv[]) {
     /* Fourier transform the Gaussian random field */
     fftw_complex *fbox = malloc(N*N*N*sizeof(fftw_complex));
     fftw_complex *fgrf = malloc(N*N*N*sizeof(fftw_complex));
+    fftw_complex *fbox2 = malloc(N*N*N*sizeof(fftw_complex));
     fftw_plan r2c = fftw_plan_dft_r2c_3d(N, N, N, box, fbox, FFTW_ESTIMATE);
     fft_execute(r2c);
     fft_normalize_r2c(fbox, N, BoxLen);
@@ -316,32 +317,43 @@ int main(int argc, char *argv[]) {
         perturbSplineFindTau(&spline, log_tau_begin, &tau_index, &u_tau);
 
         /* The indices of the potential transfer function */
-        int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
-        if (index_psi < 0) {
-            printf("Error: transfer function '%s' not found (%d).\n", "psi", index_psi);
+        int index_d = findTitle(ptdat.titles, "d_ncdm[0]", ptdat.n_functions);
+        if (index_d < 0) {
+            printf("Error: transfer function '%s' not found (%d).\n", "d_ncdm[0]", index_d);
+            return 1;
+        }
+        int index_t = findTitle(ptdat.titles, "t_ncdm[0]", ptdat.n_functions);
+        if (index_t < 0) {
+            printf("Error: transfer function '%s' not found (%d).\n", "t_ncdm[0]", index_t);
             return 1;
         }
 
         /* Package the perturbation theory interpolation spline parameters */
-        struct spline_params sp = {&spline, index_psi, tau_index, u_tau};
+        struct spline_params spd = {&spline, index_d, tau_index, u_tau};
+        struct spline_params spt = {&spline, index_t, tau_index, u_tau};
 
         /* Apply the transfer function (read only fgrf, output into fbox) */
-        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp);
+        fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &spd);
+        fft_apply_kernel(fbox2, fgrf, N, BoxLen, kernel_transfer_function, &spt);
+        fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_inv_poisson, NULL);
+        fft_apply_kernel(fbox2, fbox2, N, BoxLen, kernel_inv_poisson, NULL);
 
         /* Fourier transform to real space */
-        fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box, FFTW_ESTIMATE);
+        fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box_dic, FFTW_ESTIMATE);
         fft_execute(c2r);
-        fft_normalize_c2r(box, N, BoxLen);
+        fft_normalize_c2r(box_dic, N, BoxLen);
         fftw_destroy_plan(c2r);
 
-        /* Copy into the boxes for the density and velocity perturbations */
-        memcpy(box_dic, box, N*N*N*sizeof(double));
-        memcpy(box_tic, box, N*N*N*sizeof(double));
+        fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox2, box_tic, FFTW_ESTIMATE);
+        fft_execute(c2r2);
+        fft_normalize_c2r(box_tic, N, BoxLen);
+        fftw_destroy_plan(c2r2);
 
         /* Multiply by the appropriate factor */
         for (int i=0; i<N*N*N; i++) {
-            box_dic[i] *= -2 * inv_c2;
-            box_tic[i] *= 0.5 * exp(log_tau_begin);
+            box_dic[i] *= -1;
+            // box_dic[i] *= -2 * inv_c2;
+            // box_tic[i] *= 0.5 * exp(log_tau_begin);
         }
 
         if (rank == 0 && pars.OutputFields) {
@@ -360,58 +372,76 @@ int main(int argc, char *argv[]) {
     message(rank, "T_nu = %e eV\n", T_eV);
 
     /* Generate random neutrino particles */
-    for (long long i=0; i<localParticleNumber; i++) {
-        struct particle_ext *p = &genparts[i];
+    {
+        long long i = 0;
+        for (long long x = X_min; x < X_max; x++) {
+            for (long long y = 0; y < M; y++) {
+                for (long long z = 0; z < M; z++) {
+                    struct particle_ext *p = &genparts[i];
 
-        /* Set the ID of the particle */
-        uint64_t id = i + firstID;
+                    /* Set the ID of the particle */
+                    uint64_t id = i + firstID;
 
-        /* Generate random particle velocity and position */
-        init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
+                    // printf("%lld / %lld %lld %lld %lld\n", i, localParticleNum, x, y, z);
 
-        /* Compute the momentum in eV */
-        const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
-        const double f_i = fermi_dirac_density(p_eV, T_eV);
+                    /* Generate random particle velocity and position */
+                    init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
 
-        if (i==0)
-        message(rank, "First random momentum = %e eV\n", p_eV);
+                    p->x[0] = x * BoxLen / M;
+                    p->x[1] = y * BoxLen / M;
+                    p->x[2] = z * BoxLen / M;
 
-        /* Determine the density perturbation at this point */
-        double dnu = gridCIC(box_dic, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+                    /* Determine the initial displacement at this point */
+                    double dx[3];
+                    accelCIC(box_dic, N, BoxLen, p->x, dx);
 
-        /* The local temperature perturbation dT/T */
-        double deltaT = dnu/4;
+                    p->x[0] += dx[0];
+                    p->x[1] += dx[1];
+                    p->x[2] += dx[2];
 
-        /* Determine the initial velocity perturbation at this point */
-        double vel[3];
-        accelCIC(box_tic, N, BoxLen, p->x, vel);
+                    /* Compute the momentum in eV */
+                    const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+                    const double f_i = fermi_dirac_density(p_eV, T_eV);
 
-        /* Apply the perturbation */
-        p->v[0] *= 1.0 + deltaT;
-        p->v[1] *= 1.0 + deltaT;
-        p->v[2] *= 1.0 + deltaT;
+                    if (i==0)
+                    message(rank, "First random momentum = %e eV\n", p_eV);
 
-        /* The current energy */
-        double eps_eV = hypot(p_eV/cosmo.a_begin, m_eV);
+                    /* Determine the initial velocity at the displaced point */
+                    double vel[3];
+                    accelCIC(box_tic, N, BoxLen, p->x, vel);
 
-        /* Apply the velocity perturbation */
-        p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_begin;
-        p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_begin;
-        p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_begin;
+                    /* The current energy */
+                    double eps_eV = hypot(p_eV/cosmo.a_begin, m_eV);
 
-        /* Compute initial phase space density */
-        p->f_i = f_i;
+                    /* Add the bulk motion component */
+                    p->v[0] += vel[0] * cosmo.a_begin * inv_c * m_eV;
+                    p->v[1] += vel[1] * cosmo.a_begin * inv_c * m_eV;
+                    p->v[2] += vel[2] * cosmo.a_begin * inv_c * m_eV;
 
-        /* Compute the magnitude of the initial velocity */
-        p->v_i[0] = p->v[0];
-        p->v_i[1] = p->v[1];
-        p->v_i[2] = p->v[2];
-        p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
+                    /* Apply the velocity perturbation */
+                    // p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_begin;
+                    // p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_begin;
+                    // p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_begin;
+
+                    /* Compute initial phase space density */
+                    p->f_i = f_i;
+
+                    /* Compute the magnitude of the initial velocity */
+                    p->v_i[0] = p->v[0];
+                    p->v_i[1] = p->v[1];
+                    p->v_i[2] = p->v[2];
+                    p->v_i_mag = hypot3(p->v[0], p->v[1], p->v[2]);
+
+                    i++;
+                }
+            }
+        }
     }
 
     /* Free the boxes used for the initial conditions */
     free(box_dic);
     free(box_tic);
+    free(fbox2);
 
     message(rank, "Done with pre-initial conditions.\n");
 
@@ -423,6 +453,10 @@ int main(int argc, char *argv[]) {
     double a_factor = 1.0 + pars.ScaleFactorStep;
 
     int MAX_ITER = (log(a_end) - log(a_begin))/log(a_factor) + 1;
+
+    if (a_end == a_begin) {
+        MAX_ITER = 0;
+    }
 
     message(rank, "Step size %.4f\n", a_factor-1);
     message(rank, "Doing %d iterations\n", MAX_ITER);
@@ -974,18 +1008,18 @@ int main(int argc, char *argv[]) {
             accelCIC(box_tshift, N, BoxLen, p->x, vel);
 
             /* Apply the density shift */
-            p->v[0] *= 1 - deltaT;
-            p->v[1] *= 1 - deltaT;
-            p->v[2] *= 1 - deltaT;
+            // p->v[0] *= 1 - deltaT;
+            // p->v[1] *= 1 - deltaT;
+            // p->v[2] *= 1 - deltaT;
 
             /* The current energy */
             double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
             double eps_eV = hypot(p_eV/a_end, m_eV);
 
             /* Apply the velocity shift */
-            p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_end;
-            p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_end;
-            p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_end;
+            // p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_end;
+            // p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_end;
+            // p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_end;
         }
 
         /* Free the gauge transformation boxes */
