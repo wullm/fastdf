@@ -842,7 +842,8 @@ int main(int argc, char *argv[]) {
         acc_dot_sqsum /= (long double) localParticleNumber;
         acc_phi_tot_sqsum  /= (long double) localParticleNumber;
                 
-        message(rank, "%04d] %.5e %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", ITER, a, vel_base_sum, vel_base_sqsum, vel_psi_sum, vel_psi_sqsum, vel_phi_sum, vel_phi_sqsum, acc_base_sum, acc_base_sqsum, acc_phi_sum, acc_phi_sqsum, acc_counter_sum, acc_counter_sqsum, acc_dot_sum, acc_dot_sqsum, acc_phi_tot_sum, acc_phi_tot_sqsum);
+        // message(rank, "%04d] %.5e %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", ITER, a, vel_base_sum, vel_base_sqsum, vel_psi_sum, vel_psi_sqsum, vel_phi_sum, vel_phi_sqsum, acc_base_sum, acc_base_sqsum, acc_phi_sum, acc_phi_sqsum, acc_counter_sum, acc_counter_sqsum, acc_dot_sum, acc_dot_sqsum, acc_phi_tot_sum, acc_phi_tot_sqsum);
+        message(rank, "%04d] %.5e %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %d\n", ITER, a, sqrt(vel_base_sqsum), sqrt(vel_psi_sqsum), sqrt(vel_phi_sqsum), sqrt(acc_base_sqsum), sqrt(acc_phi_sqsum), sqrt(acc_counter_sqsum), sqrt(acc_dot_sqsum), sqrt(acc_phi_tot_sqsum), recompute);
 
         /* Linearly interpolate the potentials to the half-time step */
         double o2 = (log_tau_half - log_tau_major_prev) / (log_tau_major_next - log_tau_major_prev);
