@@ -654,8 +654,7 @@ int main(int argc, char *argv[]) {
         long double acc_dot_sum = 0, acc_dot_sqsum = 0;
         long double acc_phi_tot_sum = 0, acc_phi_tot_sqsum = 0;
                 
-
-        #pragma omp parallel for reduction(+:vel_base_sum, vel_base_sqsum, vel_psi_sum, vel_psi_sqsum, vel_phi_sum, vel_phi_sqsum, acc_base_sum, acc_base_sqsum, acc_phi_sum, acc_phi_sqsum, acc_counter_sum, acc_counter_sqsum, acc_dot_sum, acc_dot_sqsum, acc_phi_tot_sum, acc_phi_tot_sqsum)
+        #pragma omp parallel for reduction(+:vel_base_sum, vel_psi_sum, vel_phi_sum, acc_base_sum, acc_phi_sum, acc_counter_sum, acc_dot_sum, acc_phi_tot_sum)
         for (long long i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
@@ -720,22 +719,98 @@ int main(int argc, char *argv[]) {
             long double pacc_phi_tot = sqrt((q2 * acc_phi[0] - p->v_i[0] * vac) * (q2 * acc_phi[0] - p->v_i[0] * vac) + (q2 * acc_phi[1] - p->v_i[1] * vac) * (q2 * acc_phi[1] - p->v_i[1] * vac) + (q2 * acc_phi[2] - p->v_i[2] * vac) * (q2 * acc_phi[2] - p->v_i[2] * vac)) * kick_phi;
             
             vel_base_sum += vel_base;
-            vel_base_sqsum += vel_base * vel_base;
             vel_psi_sum += vel_psi;
-            vel_psi_sqsum += vel_psi * vel_psi;
             vel_phi_sum += vel_phi;
-            vel_phi_sqsum += vel_phi * vel_phi;
             
             acc_base_sum += pacc_base;
-            acc_base_sqsum += pacc_base * pacc_base;
             acc_phi_sum += pacc_phi;
-            acc_phi_sqsum += pacc_phi * pacc_phi;
             acc_counter_sum += pacc_counter;
-            acc_counter_sqsum += pacc_counter * pacc_counter;
             acc_dot_sum += pacc_dot;
-            acc_dot_sqsum += pacc_dot * pacc_dot;
             acc_phi_tot_sum += pacc_phi_tot;
-            acc_phi_tot_sqsum += pacc_phi_tot * pacc_phi_tot;
+        }
+
+        vel_base_sum /= (long double) localParticleNumber;
+        vel_psi_sum /= (long double) localParticleNumber;
+        vel_phi_sum /= (long double) localParticleNumber;
+        
+        acc_base_sum /= (long double) localParticleNumber;
+        acc_phi_sum /= (long double) localParticleNumber;
+        acc_counter_sum /= (long double) localParticleNumber;
+        acc_dot_sum /= (long double) localParticleNumber;
+        acc_phi_tot_sum /= (long double) localParticleNumber;
+
+        #pragma omp parallel for reduction(+: vel_base_sqsum, vel_psi_sqsum, vel_phi_sqsum, acc_base_sqsum, acc_phi_sqsum, acc_counter_sqsum, acc_dot_sqsum, acc_phi_tot_sqsum)
+        for (long long i=0; i<localParticleNumber; i++) {
+            struct particle_ext *p = &genparts[i];
+
+            /* Get the acceleration from the scalar potential psi */
+            double acc_psi[3];
+            accelCIC(box_psi, N, BoxLen, p->x, acc_psi);
+
+            /* Get the acceleration from the scalar potential phi */
+            double acc_phi[3];
+            accelCIC(box_phi, N, BoxLen, p->x, acc_phi);
+
+            /* Also fetch the value of the potential at the particle position */
+            double psi = gridCIC(box_psi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi = gridCIC(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double psi_c2 = psi * inv_c2;
+            double phi_c2 = phi * inv_c2;
+
+            /* Also fetch the time derivative of phi at the particle position */
+            double phi_dot = gridCIC(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot_c2 = phi_dot * inv_c2;
+
+            /* Inner product of v_i with acc_phi */
+            double vacx = p->v_i[0] * acc_phi[0];
+            double vacy = p->v_i[1] * acc_phi[1];
+            double vacz = p->v_i[2] * acc_phi[2];
+            double vac = vacx + vacy + vacz;
+
+            /* Compute the relativistic correction factors */
+            double q = p->v_i_mag;
+            double q2 = q * q;
+            double epsfac = hypot(q, a * m_eV);
+            double epsfac_inv = 1. / epsfac;
+
+            /* Compute kick and drift factors */
+            double kick_psi = epsfac * inv_c;
+            double kick_phi = epsfac_inv * inv_c;
+            double drift = epsfac_inv * (1.0 + psi_c2 + phi_c2) * c;
+
+            if (use_alternative_eom) {
+                /* Alternative drift */
+                drift = epsfac_inv * (1.0 + psi_c2 + phi_c2 * (2.0 - q2 * epsfac_inv * epsfac_inv)) * c;
+                /* Zero out the anti-symmetric term */
+                vac = 0.;
+                /* Zero out the potential derivative term */
+                phi_dot_c2 = 0;
+            }
+            
+            /* Velocity terms in units of c */
+            long double vel_base = sqrt(p->v[0]*p->v[0] + p->v[1]*p->v[1] + p->v[2]*p->v[2]) * epsfac_inv;
+            long double vel_psi = vel_base * psi_c2;
+            long double vel_phi = vel_base * phi_c2;
+            
+            if (use_alternative_eom) {
+                vel_phi = vel_base * phi_c2 * (2.0 - q2 * epsfac_inv * epsfac_inv);
+            }
+            
+            long double pacc_base = sqrt(acc_psi[0]*acc_psi[0] + acc_psi[1]*acc_psi[1] + acc_psi[2]*acc_psi[2]) * kick_psi;
+            long double pacc_phi = q2 * sqrt(acc_phi[0]*acc_phi[0] + acc_phi[1]*acc_phi[1] + acc_phi[2]*acc_phi[2]) * kick_phi;
+            long double pacc_counter = vac * sqrt(p->v_i[0]*p->v_i[0] + p->v_i[1]*p->v_i[1] + p->v_i[2]*p->v_i[2]) * kick_phi;
+            long double pacc_dot = sqrt(p->v_i[0]*p->v_i[0] + p->v_i[1]*p->v_i[1] + p->v_i[2]*p->v_i[2]) * phi_dot_c2;
+            long double pacc_phi_tot = sqrt((q2 * acc_phi[0] - p->v_i[0] * vac) * (q2 * acc_phi[0] - p->v_i[0] * vac) + (q2 * acc_phi[1] - p->v_i[1] * vac) * (q2 * acc_phi[1] - p->v_i[1] * vac) + (q2 * acc_phi[2] - p->v_i[2] * vac) * (q2 * acc_phi[2] - p->v_i[2] * vac)) * kick_phi;
+            
+            vel_base_sqsum += (vel_base - vel_base_sum) * (vel_base - vel_base_sum);
+            vel_psi_sqsum += (vel_psi - vel_psi_sum) * (vel_psi - vel_psi_sum);
+            vel_phi_sqsum += (vel_phi - vel_phi_sum) * (vel_phi - vel_phi_sum);
+            
+            acc_base_sqsum += (pacc_base - acc_base_sum) * (pacc_base - acc_base_sum);
+            acc_phi_sqsum += (pacc_phi - acc_phi_sum) * (pacc_phi - acc_phi_sum);
+            acc_counter_sqsum += (pacc_counter - acc_counter_sum) * (pacc_counter - acc_counter_sum);
+            acc_dot_sqsum += (pacc_dot - acc_dot_sum) * (pacc_dot - acc_dot_sum);
+            acc_phi_tot_sqsum += (pacc_phi_tot - acc_phi_tot_sum) * (pacc_phi_tot - acc_phi_tot_sum);
             
             /* Execute first gradient term */
             p->v[0] -= acc_psi[0] * kick_psi * dtau1;
@@ -758,23 +833,14 @@ int main(int argc, char *argv[]) {
             p->x[2] += p->v[2] * drift * dtau;
         }
         
-        
-        vel_base_sum /= (long double) localParticleNumber;
         vel_base_sqsum /= (long double) localParticleNumber;
-        vel_psi_sum /= (long double) localParticleNumber;
         vel_psi_sqsum /= (long double) localParticleNumber;
-        vel_phi_sum /= (long double) localParticleNumber;
         vel_phi_sqsum /= (long double) localParticleNumber;
         
-        acc_base_sum /= (long double) localParticleNumber;
         acc_base_sqsum /= (long double) localParticleNumber;
-        acc_phi_sum /= (long double) localParticleNumber;
         acc_phi_sqsum /= (long double) localParticleNumber;
-        acc_counter_sum /= (long double) localParticleNumber;
         acc_counter_sqsum /= (long double) localParticleNumber;
-        acc_dot_sum /= (long double) localParticleNumber;
         acc_dot_sqsum /= (long double) localParticleNumber;
-        acc_phi_tot_sum /= (long double) localParticleNumber;
         acc_phi_tot_sqsum  /= (long double) localParticleNumber;
                 
         message(rank, "%04d] %.5e %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", ITER, a, vel_base_sum, vel_base_sqsum, vel_psi_sum, vel_psi_sqsum, vel_phi_sum, vel_phi_sqsum, acc_base_sum, acc_base_sqsum, acc_phi_sum, acc_phi_sqsum, acc_counter_sum, acc_counter_sqsum, acc_dot_sum, acc_dot_sqsum, acc_phi_tot_sum, acc_phi_tot_sqsum);
