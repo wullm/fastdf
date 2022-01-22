@@ -644,15 +644,15 @@ int main(int argc, char *argv[]) {
         }
 
         /* Integrate the particles */
-        double vel_base_sum = 0, vel_base_sqsum = 0;
-        double vel_psi_sum = 0, vel_psi_sqsum = 0;
-        double vel_phi_sum = 0, vel_phi_sqsum = 0;
+        long double vel_base_sum = 0, vel_base_sqsum = 0;
+        long double vel_psi_sum = 0, vel_psi_sqsum = 0;
+        long double vel_phi_sum = 0, vel_phi_sqsum = 0;
         
-        double acc_base_sum = 0, acc_base_sqsum = 0;
-        double acc_phi_sum = 0, acc_phi_sqsum = 0;
-        double acc_counter_sum = 0, acc_counter_sqsum = 0;
-        double acc_dot_sum = 0, acc_dot_sqsum = 0;
-        double acc_phi_tot_sum = 0, acc_phi_tot_sqsum = 0;
+        long double acc_base_sum = 0, acc_base_sqsum = 0;
+        long double acc_phi_sum = 0, acc_phi_sqsum = 0;
+        long double acc_counter_sum = 0, acc_counter_sqsum = 0;
+        long double acc_dot_sum = 0, acc_dot_sqsum = 0;
+        long double acc_phi_tot_sum = 0, acc_phi_tot_sqsum = 0;
                 
 
         #pragma omp parallel for reduction(+:vel_base_sum, vel_base_sqsum, vel_psi_sum, vel_psi_sqsum, vel_phi_sum, vel_phi_sqsum, acc_base_sum, acc_base_sqsum, acc_phi_sum, acc_phi_sqsum, acc_counter_sum, acc_counter_sqsum, acc_dot_sum, acc_dot_sqsum, acc_phi_tot_sum, acc_phi_tot_sqsum)
@@ -703,19 +703,21 @@ int main(int argc, char *argv[]) {
                 phi_dot_c2 = 0;
             }
             
-            double vel_base = sqrt(p->v[0]*p->v[0] + p->v[1]*p->v[1] + p->v[2]*p->v[2]) * epsfac_inv * c;
-            double vel_psi = vel_base * psi_c2;
-            double vel_phi = vel_base * phi_c2;
+            /* Velocity terms in units of c */
+            long double vel_base = sqrt(p->v[0]*p->v[0] + p->v[1]*p->v[1] + p->v[2]*p->v[2]) * epsfac_inv;
+            long double vel_psi = vel_base * psi_c2;
+            long double vel_phi = vel_base * phi_c2;
             
             if (use_alternative_eom) {
                 vel_phi = vel_base * phi_c2 * (2.0 - q2 * epsfac_inv * epsfac_inv);
             }
             
-            double pacc_base = sqrt(acc_psi[0]*acc_psi[0] + acc_psi[1]*acc_psi[1] + acc_psi[2]*acc_psi[2]) * kick_psi;
-            double pacc_phi = q2 * sqrt(acc_phi[0]*acc_phi[0] + acc_phi[1]*acc_phi[1] + acc_phi[2]*acc_phi[2]) * kick_phi;
-            double pacc_counter = vac * sqrt(p->v_i[0]*p->v_i[0] + p->v_i[1]*p->v_i[1] + p->v_i[2]*p->v_i[2]) * kick_phi;
-            double pacc_dot = sqrt(p->v_i[0]*p->v_i[0] + p->v_i[1]*p->v_i[1] + p->v_i[2]*p->v_i[2]) * phi_dot_c2;
-            double pacc_phi_tot = sqrt((q2 * acc_phi[0] - p->v_i[0] * vac) * (q2 * acc_phi[0] - p->v_i[0] * vac) + (q2 * acc_phi[1] - p->v_i[1] * vac) * (q2 * acc_phi[1] - p->v_i[1] * vac) + (q2 * acc_phi[2] - p->v_i[2] * vac) * (q2 * acc_phi[2] - p->v_i[2] * vac)) * kick_phi;
+            
+            long double pacc_base = sqrt(acc_psi[0]*acc_psi[0] + acc_psi[1]*acc_psi[1] + acc_psi[2]*acc_psi[2]) * kick_psi;
+            long double pacc_phi = q2 * sqrt(acc_phi[0]*acc_phi[0] + acc_phi[1]*acc_phi[1] + acc_phi[2]*acc_phi[2]) * kick_phi;
+            long double pacc_counter = vac * sqrt(p->v_i[0]*p->v_i[0] + p->v_i[1]*p->v_i[1] + p->v_i[2]*p->v_i[2]) * kick_phi;
+            long double pacc_dot = sqrt(p->v_i[0]*p->v_i[0] + p->v_i[1]*p->v_i[1] + p->v_i[2]*p->v_i[2]) * phi_dot_c2;
+            long double pacc_phi_tot = sqrt((q2 * acc_phi[0] - p->v_i[0] * vac) * (q2 * acc_phi[0] - p->v_i[0] * vac) + (q2 * acc_phi[1] - p->v_i[1] * vac) * (q2 * acc_phi[1] - p->v_i[1] * vac) + (q2 * acc_phi[2] - p->v_i[2] * vac) * (q2 * acc_phi[2] - p->v_i[2] * vac)) * kick_phi;
             
             vel_base_sum += vel_base;
             vel_base_sqsum += vel_base * vel_base;
@@ -757,25 +759,25 @@ int main(int argc, char *argv[]) {
         }
         
         
-        vel_base_sum /= (double) localParticleNumber;
-        vel_base_sqsum /= (double) localParticleNumber;
-        vel_psi_sum /= (double) localParticleNumber;
-        vel_psi_sqsum /= (double) localParticleNumber;
-        vel_phi_sum /= (double) localParticleNumber;
-        vel_phi_sqsum /= (double) localParticleNumber;
+        vel_base_sum /= (long double) localParticleNumber;
+        vel_base_sqsum /= (long double) localParticleNumber;
+        vel_psi_sum /= (long double) localParticleNumber;
+        vel_psi_sqsum /= (long double) localParticleNumber;
+        vel_phi_sum /= (long double) localParticleNumber;
+        vel_phi_sqsum /= (long double) localParticleNumber;
         
-        acc_base_sum /= (double) localParticleNumber;
-        acc_base_sqsum /= (double) localParticleNumber;
-        acc_phi_sum /= (double) localParticleNumber;
-        acc_phi_sqsum /= (double) localParticleNumber;
-        acc_counter_sum /= (double) localParticleNumber;
-        acc_counter_sqsum /= (double) localParticleNumber;
-        acc_dot_sum /= (double) localParticleNumber;
-        acc_dot_sqsum /= (double) localParticleNumber;
-        acc_phi_tot_sum /= (double) localParticleNumber;
-        acc_phi_tot_sqsum  /= (double) localParticleNumber;
+        acc_base_sum /= (long double) localParticleNumber;
+        acc_base_sqsum /= (long double) localParticleNumber;
+        acc_phi_sum /= (long double) localParticleNumber;
+        acc_phi_sqsum /= (long double) localParticleNumber;
+        acc_counter_sum /= (long double) localParticleNumber;
+        acc_counter_sqsum /= (long double) localParticleNumber;
+        acc_dot_sum /= (long double) localParticleNumber;
+        acc_dot_sqsum /= (long double) localParticleNumber;
+        acc_phi_tot_sum /= (long double) localParticleNumber;
+        acc_phi_tot_sqsum  /= (long double) localParticleNumber;
                 
-        message(rank, "%04d] %.5e %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", ITER, a, vel_base_sum, vel_base_sqsum, vel_psi_sum, vel_psi_sqsum, vel_phi_sum, vel_phi_sqsum, acc_base_sum, acc_base_sqsum, acc_phi_sum, acc_phi_sqsum, acc_counter_sum, acc_counter_sqsum, acc_dot_sum, acc_dot_sqsum, acc_phi_tot_sum, acc_phi_tot_sqsum);
+        message(rank, "%04d] %.5e %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", ITER, a, vel_base_sum, vel_base_sqsum, vel_psi_sum, vel_psi_sqsum, vel_phi_sum, vel_phi_sqsum, acc_base_sum, acc_base_sqsum, acc_phi_sum, acc_phi_sqsum, acc_counter_sum, acc_counter_sqsum, acc_dot_sum, acc_dot_sqsum, acc_phi_tot_sum, acc_phi_tot_sqsum);
 
         /* Linearly interpolate the potentials to the half-time step */
         double o2 = (log_tau_half - log_tau_major_prev) / (log_tau_major_next - log_tau_major_prev);
