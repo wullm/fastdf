@@ -428,8 +428,8 @@ int main(int argc, char *argv[]) {
     double a_begin_fine = pars.ScaleFactorBeginFine; //when to begin with fine time steps
     double a_factor_fine  = 1.0 + pars.ScaleFactorStepFine; // fine time step size
     if (a_factor_fine != a_factor) {
-        int MAX_ITER_INITIAL = (log(a_begin_fine) - log(a_begin))/log(a_factor_fine);
-        int MAX_ITER_FINE = (log(a_end) - log(a_begin_fine))/log(a_factor) + 1;
+        int MAX_ITER_INITIAL = (log(a_begin_fine) - log(a_begin))/log(a_factor);
+        int MAX_ITER_FINE = (log(a_end) - log(a_begin_fine))/log(a_factor_fine) + 1;
 
         MAX_ITER = MAX_ITER_INITIAL + MAX_ITER_FINE;
 
