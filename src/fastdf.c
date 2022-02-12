@@ -508,7 +508,7 @@ int main(int argc, char *argv[]) {
         if (ITER == 0) {
             a_next = a; //start with a step that does nothing
         } else if (ITER < MAX_ITER - 1) {
-            a *= (a < a_begin_fine) ? a_factor : a_factor_fine;
+            a_next = a * ((a < a_begin_fine) ? a_factor : a_factor_fine);
         } else {
             a_next = a_end;
         }
@@ -565,7 +565,7 @@ int main(int argc, char *argv[]) {
 
                 /* Step forward */
                 if (j < MAX_ITER - 1) {
-                    a_major_next *= (a_major_next < a_begin_fine) ? a_factor : a_factor_fine;
+                    a_major_next = a_major_next * ((a_major_next < a_begin_fine) ? a_factor : a_factor_fine);
                 } else {
                     a_major_next = a_end;
                 }
