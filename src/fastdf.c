@@ -428,12 +428,12 @@ int main(int argc, char *argv[]) {
     double a_begin_fine = pars.ScaleFactorBegin; //when to begin with fine time steps
     double a_factor_fine  = 1.0 + pars.ScaleFactorStepFine; // fine time step size
     if (a_factor_fine != a_factor) {
-        int MAX_ITER_INITIAL = (log(a_begin_fine) - log(a_begin))/log(a_factor);
-        int MAX_ITER_FINE = (log(a_end) - log(a_begin_fine))/log(a_factor_fine) + 1;
+        int MAX_ITER_INITIAL = (log(a_begin_fine) - log(a_begin))/log(a_factor_fine);
+        int MAX_ITER_FINE = (log(a_end) - log(a_begin_fine))/log(a_factor) + 1;
 
         MAX_ITER = MAX_ITER_INITIAL + MAX_ITER_FINE;
 
-        message(rank, "Step size %.4f (with finer step size %.4f for a > %g)\n", a_factor-1, a_begin_fine);
+        message(rank, "Step size %.4f (with finer step size %.4f for a > %g)\n", a_factor-1, a_factor_fine-1, a_begin_fine);
         message(rank, "Doing %d iterations (including %d fine steps)\n", MAX_ITER, MAX_ITER_FINE);
         message(rank, "\n");
     } else {
