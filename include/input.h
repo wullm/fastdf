@@ -65,6 +65,10 @@ struct params {
     double RecomputeTrigger;
     double RecomputeScaleRef;
 
+    /* Finer integration parameters */
+    double ScaleFactorBeginFine;
+    double ScaleFactorStepFine;
+
     /* Alternative Equation of Motion Mode */
     char AlternativeEquations;
 
