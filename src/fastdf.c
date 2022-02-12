@@ -425,7 +425,7 @@ int main(int argc, char *argv[]) {
     int MAX_ITER;
 
     /* Allow for finer integration near the end */
-    double a_begin_fine = pars.ScaleFactorBegin; //when to begin with fine time steps
+    double a_begin_fine = pars.ScaleFactorBeginFine; //when to begin with fine time steps
     double a_factor_fine  = 1.0 + pars.ScaleFactorStepFine; // fine time step size
     if (a_factor_fine != a_factor) {
         int MAX_ITER_INITIAL = (log(a_begin_fine) - log(a_begin))/log(a_factor_fine);
