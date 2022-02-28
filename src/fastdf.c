@@ -449,36 +449,63 @@ int main(int argc, char *argv[]) {
             double central_volume = 4.0 * M_PI / 3.0 * center_sphere_radius *
                                     center_sphere_radius * center_sphere_radius;
             double total_volume = BoxLen * BoxLen * BoxLen;
-            double outer_volume = total_volume - central_volume;
+            // double outer_volume = total_volume - central_volume;
             double y = sampleUniform(&id);
             if (y < center_sphere_ratio) {
+                /* First, sample a radius from a folded truncated Gaussian */
+                double r;
+                double sMax = 4.0; // how many standard deviation before truncating
                 int done = 0;
                 while (!done) {
-                    double u = 2.0 * sampleUniform(&id) - 1.0;
-                    double v = 2.0 * sampleUniform(&id) - 1.0;
-                    double w = 2.0 * sampleUniform(&id) - 1.0;
-                    if (hypot3(u,v,w) < 1.0) {
-                        p->x[0] = 0.5 * BoxLen + u * center_sphere_radius;
-                        p->x[1] = 0.5 * BoxLen + v * center_sphere_radius;
-                        p->x[2] = 0.5 * BoxLen + w * center_sphere_radius;
+                    r = fabs(sampleGaussian(&id));
+                    if (r < sMax) {
                         done = 1;
                     }
                 }
-                p->mass = particle_mass * central_volume / (total_volume * center_sphere_ratio);
+
+                /* Then set the mass accordingly */
+                double Z = erf(sMax/sqrt(2.0)) - erf(0.0);
+                double f = 2.0 / sqrt(2.0 * M_PI) * (exp(-0.5 * r * r)) / Z;
+                p->mass = particle_mass * (r * r * r) / (sMax * sMax * sMax) * central_volume / (total_volume * center_sphere_ratio * f);
+
+                /* Rescale */
+                r *= center_sphere_radius / sMax;
+
+                /* Then, sample a direction */
+                double nx = sampleGaussian(&id);
+                double ny = sampleGaussian(&id);
+                double nz = sampleGaussian(&id);
+
+                /* Normalize it */
+                double n = hypot3(nx, ny, nz);
+                if (n > 0) {
+                    nx /= n;
+                    ny /= n;
+                    nz /= n;
+                }
+
+                /* Set the position */
+                p->x[0] = 0.5 * BoxLen + nx * r;
+                p->x[1] = 0.5 * BoxLen + ny * r;
+                p->x[2] = 0.5 * BoxLen + nz * r;
             } else {
-                int done = 0;
-                while (!done) {
-                    double u = (sampleUniform(&id) - 0.5) * BoxLen;
-                    double v = (sampleUniform(&id) - 0.5) * BoxLen;
-                    double w = (sampleUniform(&id) - 0.5) * BoxLen;
-                    if (hypot3(u,v,w) >= center_sphere_radius) {
-                        p->x[0] = 0.5 * BoxLen + u;
-                        p->x[1] = 0.5 * BoxLen + v;
-                        p->x[2] = 0.5 * BoxLen + w;
-                        done = 1;
-                    }
-                }
-                p->mass = particle_mass * outer_volume / (total_volume * (1.0 - center_sphere_ratio));
+                // int done = 0;
+                // while (!done) {
+                //     double u = (sampleUniform(&id) - 0.5) * BoxLen;
+                //     double v = (sampleUniform(&id) - 0.5) * BoxLen;
+                //     double w = (sampleUniform(&id) - 0.5) * BoxLen;
+                //     if (hypot3(u,v,w) >= center_sphere_radius) {
+                //         p->x[0] = 0.5 * BoxLen + u;
+                //         p->x[1] = 0.5 * BoxLen + v;
+                //         p->x[2] = 0.5 * BoxLen + w;
+                //         done = 1;
+                //     }
+                // }
+                // p->mass = particle_mass * outer_volume / (total_volume * (1.0 - center_sphere_ratio));
+                p->x[0] = sampleUniform(&id) * BoxLen;
+                p->x[1] = sampleUniform(&id) * BoxLen;
+                p->x[2] = sampleUniform(&id) * BoxLen;
+                p->mass = particle_mass / (1.0 - center_sphere_ratio);
             }
 
 
