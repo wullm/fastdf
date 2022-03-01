@@ -443,10 +443,17 @@ int main(int argc, char *argv[]) {
             double h = (v_i_mag - v_near) / (v_max - v_min) * interp_table_len;
             double x = (1.0 - h) * x_of_v[j] + h * x_of_v[j + 1];
 
+            /* Parameters of the truncated normal distribution used for the hi-res particle radii */
+            const double truncate = 4.0; // how many standard deviations from the mean before truncating
+            const double mu = 3.0; // the mean in standard deviations
+            const double inner_most_scale = 0.05; // lower edge in standard deviations below which there are only hi-res particles
+            const double truncate_CDF = 0.5 * (erf(truncate/sqrt(2.0)) - erf(-mu/sqrt(2.0)));
+            const double inner_most_CDF = 0.5 * (erf((inner_most_scale - mu)/sqrt(2.0)) - erf(-mu/sqrt(2.0))) / truncate_CDF;
+
             /* Determine a desired final position using rejection sampling */
             double center_sphere_ratio = pars.CentralRatio;
             double center_sphere_radius = pars.CentralRadius;
-            double inner_most_radius = center_sphere_radius * 0.05;
+            double inner_most_radius = center_sphere_radius * inner_most_scale;
             double central_volume = 4.0 * M_PI / 3.0 * center_sphere_radius *
                                     center_sphere_radius * center_sphere_radius;
             double inner_most_volume = 4.0 * M_PI / 3.0 * inner_most_radius *
@@ -454,37 +461,30 @@ int main(int argc, char *argv[]) {
             double total_volume = BoxLen * BoxLen * BoxLen;
             double outer_volume = total_volume - central_volume;
 
-            /* Parameters of the truncated exponential distribution used for the hi-res particle radii */
-            const double lambda = 0.5; // scale parameter
-            const double sMax = 4.0; // how many scale radii before truncating
-            const double inner_most_CDF = (1.0 - exp(-lambda * inner_most_radius / center_sphere_radius * sMax));
-            const double truncate_CDF = (1.0 - exp(-lambda * sMax));
-
-            /* The fraction of hi-res (non-uniformly sampled) particles among all particles in the central sphere */
+            /* The fraction of hi-res (non-uniformly sampled) particles among all particles in the central sphere, but outside the innermost shell */
             double central_hires_ratio = center_sphere_ratio * (1.0 - inner_most_CDF) / ((1.0 - center_sphere_ratio) * (central_volume - inner_most_volume) / total_volume + center_sphere_ratio * (1.0 - inner_most_CDF));
 
             /* Place the particle */
             double y = sampleUniform(&id);
             if (y < center_sphere_ratio) {
-                /* First, sample a radius from a truncated exponential */
+                /* First, sample a radius from the truncated normal */
                 double r;
                 int done = 0;
                 while (!done) {
-                    double u = sampleUniform(&id);
-                    r = -log(u) / lambda;
-                    if (r < sMax) {
+                    r = sampleGaussian(&id) + mu;
+                    if (r > 0 && r < truncate + mu) {
                         done = 1;
                     }
                 }
 
                 /* Compute the probability density at this radius */
-                double f = lambda * exp(-lambda * r) / truncate_CDF;
+                double f = 1.0 / sqrt(2.0 * M_PI) * exp(-0.5 * (r - mu) * (r - mu)) / truncate_CDF;
 
                 /* Rescale the radius */
-                r *= center_sphere_radius / sMax;
+                r *= center_sphere_radius / (truncate + mu);
 
-                /* Set the mass accordingly*/
-                double dVol = 4.0 * M_PI * r * r * (center_sphere_radius / sMax);
+                /* Set the mass (taking into account that there are also low-res particles outside the innermost radius) */
+                double dVol = 4.0 * M_PI * r * r * (center_sphere_radius / (truncate + mu));
                 if (r < inner_most_radius) {
                     p->mass = particle_mass * dVol / (total_volume * center_sphere_ratio * f);
                 } else {
