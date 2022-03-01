@@ -446,30 +446,50 @@ int main(int argc, char *argv[]) {
             /* Determine a desired final position using rejection sampling */
             double center_sphere_ratio = pars.CentralRatio;
             double center_sphere_radius = pars.CentralRadius;
+            double inner_most_radius = center_sphere_radius * 0.05;
             double central_volume = 4.0 * M_PI / 3.0 * center_sphere_radius *
                                     center_sphere_radius * center_sphere_radius;
+            double inner_most_volume = 4.0 * M_PI / 3.0 * inner_most_radius *
+                                    inner_most_radius * inner_most_radius;
             double total_volume = BoxLen * BoxLen * BoxLen;
-            // double outer_volume = total_volume - central_volume;
+            double outer_volume = total_volume - central_volume;
+
+            /* Parameters of the truncated exponential distribution used for the hi-res particle radii */
+            const double lambda = 0.5; // scale parameter
+            const double sMax = 4.0; // how many scale radii before truncating
+            const double inner_most_CDF = (1.0 - exp(-lambda * inner_most_radius / center_sphere_radius * sMax));
+            const double truncate_CDF = (1.0 - exp(-lambda * sMax));
+
+            /* The fraction of hi-res (non-uniformly sampled) particles among all particles in the central sphere */
+            double central_hires_ratio = center_sphere_ratio * (1.0 - inner_most_CDF) / ((1.0 - center_sphere_ratio) * (central_volume - inner_most_volume) / total_volume + center_sphere_ratio * (1.0 - inner_most_CDF));
+
+            /* Place the particle */
             double y = sampleUniform(&id);
             if (y < center_sphere_ratio) {
-                /* First, sample a radius from a folded truncated Gaussian */
+                /* First, sample a radius from a truncated exponential */
                 double r;
-                double sMax = 4.0; // how many standard deviation before truncating
                 int done = 0;
                 while (!done) {
-                    r = fabs(sampleGaussian(&id));
+                    double u = sampleUniform(&id);
+                    r = -log(u) / lambda;
                     if (r < sMax) {
                         done = 1;
                     }
                 }
 
-                /* Then set the mass accordingly */
-                double Z = erf(sMax/sqrt(2.0)) - erf(0.0);
-                double f = 2.0 / sqrt(2.0 * M_PI) * (exp(-0.5 * r * r)) / Z;
-                p->mass = particle_mass * (r * r * r) / (sMax * sMax * sMax) * central_volume / (total_volume * center_sphere_ratio * f);
+                /* Compute the probability density at this radius */
+                double f = lambda * exp(-lambda * r) / truncate_CDF;
 
-                /* Rescale */
+                /* Rescale the radius */
                 r *= center_sphere_radius / sMax;
+
+                /* Set the mass accordingly*/
+                double dVol = 4.0 * M_PI * r * r * (center_sphere_radius / sMax);
+                if (r < inner_most_radius) {
+                    p->mass = particle_mass * dVol / (total_volume * center_sphere_ratio * f);
+                } else {
+                    p->mass = particle_mass * central_hires_ratio * dVol / (total_volume * center_sphere_ratio * f);
+                }
 
                 /* Then, sample a direction */
                 double nx = sampleGaussian(&id);
@@ -489,23 +509,23 @@ int main(int argc, char *argv[]) {
                 p->x[1] = 0.5 * BoxLen + ny * r;
                 p->x[2] = 0.5 * BoxLen + nz * r;
             } else {
-                // int done = 0;
-                // while (!done) {
-                //     double u = (sampleUniform(&id) - 0.5) * BoxLen;
-                //     double v = (sampleUniform(&id) - 0.5) * BoxLen;
-                //     double w = (sampleUniform(&id) - 0.5) * BoxLen;
-                //     if (hypot3(u,v,w) >= center_sphere_radius) {
-                //         p->x[0] = 0.5 * BoxLen + u;
-                //         p->x[1] = 0.5 * BoxLen + v;
-                //         p->x[2] = 0.5 * BoxLen + w;
-                //         done = 1;
-                //     }
-                // }
-                // p->mass = particle_mass * outer_volume / (total_volume * (1.0 - center_sphere_ratio));
-                p->x[0] = sampleUniform(&id) * BoxLen;
-                p->x[1] = sampleUniform(&id) * BoxLen;
-                p->x[2] = sampleUniform(&id) * BoxLen;
-                p->mass = particle_mass / (1.0 - center_sphere_ratio);
+                int done = 0;
+                while (!done) {
+                    double u = (sampleUniform(&id) - 0.5) * BoxLen;
+                    double v = (sampleUniform(&id) - 0.5) * BoxLen;
+                    double w = (sampleUniform(&id) - 0.5) * BoxLen;
+                    if (hypot3(u,v,w) >= inner_most_radius) {
+                        p->x[0] = 0.5 * BoxLen + u;
+                        p->x[1] = 0.5 * BoxLen + v;
+                        p->x[2] = 0.5 * BoxLen + w;
+                        done = 1;
+                    }
+                    if (hypot3(u,v,w) >= center_sphere_radius) {
+                        p->mass = particle_mass / (1.0 - center_sphere_ratio);
+                    } else {
+                        p->mass = particle_mass / (1.0 - center_sphere_ratio) * (1.0 - central_hires_ratio);
+                    }
+                }
             }
 
 
