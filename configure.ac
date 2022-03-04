@@ -12,6 +12,7 @@ AX_MPI([CC="$MPICC" AC_DEFINE(HAVE_MPI, 1, [Define if you have the MPI library.]
 # Check for FFTW
 AC_CHECK_LIB([fftw3], [fftw_plan_dft])
 AC_CHECK_LIB([fftw3_mpi], [fftw_mpi_init])
+AC_CHECK_LIB([gslcblas], [cblas_dgemm])
 AC_CHECK_LIB([gsl], [gsl_integration_qag])
 AC_SEARCH_LIBS([sqrt], [m])
 
