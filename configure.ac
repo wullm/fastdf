@@ -1,6 +1,6 @@
 AC_INIT([fastdf], [2022.1.1], [whe@willemelbers.com])
 AM_INIT_AUTOMAKE([subdir-objects])
-AC_CONFIG_FILES([Makefile src/Makefile parser/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile])
 AC_PROG_CC
 
 # Add local macro collection.
