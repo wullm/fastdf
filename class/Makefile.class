@@ -12,14 +12,10 @@ OMPFLAG   = -fopenmp
 CCFLAG = -g -fPIC
 LDFLAG = -g -fPIC
 
-TOOLS = $(CLASS_PATH)/build/growTable.o $(CLASS_PATH)/build/dei_rkck.o $(CLASS_PATH)/build/sparse.o $(CLASS_PATH)/build/evolver_rkck.o $(CLASS_PATH)/build/evolver_ndf15.o $(CLASS_PATH)/build/arrays.o $(CLASS_PATH)/build/parser.o $(CLASS_PATH)/build/quadrature.o $(CLASS_PATH)/build/hyperspherical.o $(CLASS_PATH)/build/common.o $(CLASS_PATH)/build/trigonometric_integrals.o
-
-SOURCE = $(CLASS_PATH)/build/input.o $(CLASS_PATH)/build/background.o $(CLASS_PATH)/build/thermodynamics.o $(CLASS_PATH)/build/perturbations.o $(CLASS_PATH)/build/primordial.o $(CLASS_PATH)/build/fourier.o $(CLASS_PATH)/build/transfer.o $(CLASS_PATH)/build/harmonic.o $(CLASS_PATH)/build/lensing.o $(CLASS_PATH)/build/distortions.o
-
 all: libclass.so
 
 libclass.so:
-	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -shared -o libclass.so $(TOOLS) $(SOURCE) -lm
+	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -shared -o libclass.so $(CLASS_PATH)/build/*.o -lm
 
 clean:
 	-rm -f *.so
