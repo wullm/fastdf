@@ -2,6 +2,7 @@ AC_INIT([fastdf], [2022.1.1], [whe@willemelbers.com])
 AM_INIT_AUTOMAKE([subdir-objects])
 AC_CONFIG_FILES([Makefile])
 AC_PROG_CC
+AM_PROG_CC_C_O
 
 # Add local macro collection.
 AC_CONFIG_MACRO_DIR([m4])

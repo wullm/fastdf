@@ -2,7 +2,7 @@
 ACLOCAL_AMFLAGS = -I m4
 
 # The main libraries
-AM_CFLAGS = $(HDF5_CPPFLAGS)  $(FFTW_INCS) $(GSL_INCS)
+AM_CFLAGS = $(HDF5_CPPFLAGS)  $(FFTW_INCS) $(GSL_INCS) -fopenmp
 AM_LDFLAGS = $(HDF5_LDFLAGS) $(FFTW_LIBS)
 
 # The main programs
