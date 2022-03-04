@@ -65,9 +65,24 @@ int main(int argc, char *argv[]) {
     readParams(&pars, fname);
     readUnits(&us, fname);
 
-    /* Read the perturbation data file */
-    readPerturb(&pars, &us, &ptdat);
-    readPerturbParams(&pars, &us, &ptpars);
+    /* Check if the user specified a perturbation data file or if CLASS
+     * is to be run. If so, FastDF must be compiled with CLASS. */
+    if (pars.PerturbFile[0] != '\0') {
+        /* Read the perturbation data file */
+        readPerturb(&pars, &us, &ptdat);
+        readPerturbParams(&pars, &us, &ptpars);
+    } else {
+        /* Run CLASS */
+        #ifdef WITH_CLASS
+        run_class(&ptdat, &us, &ptpars, "input_class_parameters.ini");
+        #else
+        printf("\n");
+        printf("Error: Not compiled with CLASS.\n");
+        printf("You could reconfigure with \"./configure --with-class=/your/class\" and then \n");
+        printf("\"make clean && make\". Alternatively, you could provide a perturbation vector file.\n");
+        return 1;
+        #endif
+    }
 
     /* Store cosmological parameters */
     cosmo.a_begin = pars.ScaleFactorBegin;

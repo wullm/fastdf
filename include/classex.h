@@ -1,6 +1,6 @@
 /*******************************************************************************
- * This file is part of Mitos.
- * Copyright (c) 2020 Willem Elbers (whe@willemelbers.com)
+ * This file is part of FastDF.
+ * Copyright (c) 2022 Willem Elbers (whe@willemelbers.com)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,28 +17,19 @@
  *
  ******************************************************************************/
 
-#ifndef FASTDF_H
-#define FASTDF_H
-
-
-#include "input.h"
-#include "output.h"
-#include "message.h"
-#include "delta_f.h"
-#include "header.h"
-#include "perturb_data.h"
-#include "perturb_spline.h"
-#include "particle.h"
-#include "titles.h"
-#include "cosmology.h"
-#include "fft.h"
-#include "fft_kernels.h"
-#include "relativity.h"
-#include "mesh_grav.h"
-
 /* Did we compile with CLASS? */
 #ifdef WITH_CLASS
-#include "classex.h"
-#endif
 
+#ifndef CLASSEX_H
+#define CLASSEX_H
+
+#include <hdf5.h>
+#include "../include/perturb_data.h"
+#include "../include/input.h"
+
+int run_class(struct perturb_data *data, struct units *us, 
+              struct perturb_params *ptpars, char *ini_filename);
+
+
+#endif
 #endif

@@ -37,11 +37,14 @@ AM_CONDITIONAL([WITH_CLASS], [test "$with_class" != "no"])
 if test "$with_class" != "no"; then
     CLASS_PATH=$with_class
     CLASS_LIBS="class/libclass.so"
-    AC_SUBST([CLASS_PATH])
-    AC_SUBST([CLASS_LIBS])
+    CLASS_INCS="-I$CLASS_PATH/include -I$CLASS_PATH/external/HyRec2020 -I$CLASS_PATH/external/RecfastCLASS -I$CLASS_PATH/external/heating"
+    AC_SUBST([CLASS_PATH]) # Subsitute Makefile definition
+    AC_SUBST([CLASS_LIBS]) # Subsitute Makefile definition
+    AC_SUBST([CLASS_INCS]) # Subsitute Makefile definition
     AC_MSG_RESULT([
     Compiling with CLASS at: $CLASS_PATH
     ])
+    AC_DEFINE(WITH_CLASS, 1) # C definition
 fi
 
 AC_OUTPUT

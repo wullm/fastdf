@@ -47,6 +47,9 @@ struct params {
     char *GaussianRandomFieldDataset;
     char InvertField;
 
+    /* CLASS parameter file names */
+    char *ClassIniFile;
+
     /* Parameters of the primordial power spectrum (optional) */
     char NormalizeGaussianField;
     char AssumeMonofonicNormalization;
