@@ -15,7 +15,7 @@ LDFLAG = -g -fPIC
 all: libclass.so
 
 libclass.so:
-	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -shared -o libclass.so $(CLASS_PATH)/build/*.o -lm
+	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -shared -o libclass.so $(CLASS_OBJS)/*.o $(CLASS_INCS) -lm
 
 clean:
 	-rm -f *.so
