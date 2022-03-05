@@ -136,7 +136,7 @@ int main(int argc, char *argv[]) {
 
     /* Read the Gaussian random field on each MPI rank */
     double *box;
-    double BoxLen;
+    double BoxLen = 0.;
     int N;
 
     header(rank, "Random phases");
@@ -145,6 +145,14 @@ int main(int argc, char *argv[]) {
     readFieldFileDataSet(&box, &N, &BoxLen, pars.GaussianRandomFieldFile, pars.GaussianRandomFieldDataset);
     // readFieldFile(&box, &N, &BoxLen, pars.GaussianRandomFieldFile);
     // readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.GaussianRandomFieldFile);
+
+    /* Override the box length? */
+    if (BoxLen > 0.) {
+        pars.BoxLen = BoxLen;
+    } else {
+        /* Otherwise, look for a user-specified value */
+        BoxLen = pars.BoxLen;
+    }
 
     message(rank, "BoxLen = %.2f U_L\n", BoxLen);
     message(rank, "GridSize = %d\n", N);

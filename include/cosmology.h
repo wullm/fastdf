@@ -20,9 +20,6 @@
 #ifndef COSMOLOGY_H
 #define COSMOLOGY_H
 
-#include <hdf5.h>
-#include "input.h"
-
 double ncdm_isentropic_ratio(double a, double m, double T);
 double ncdm_equation_of_state(double a, double m, double T);
 

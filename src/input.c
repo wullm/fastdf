@@ -38,6 +38,7 @@ int readParams(struct params *pars, const char *fname) {
      pars->RecomputeScaleRef = ini_getd("Simulation", "RecomputeScaleRef", 0.0, fname);
      pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname);
      pars->InvertField = ini_getd("Box", "InvertField", 0, fname);
+     pars->BoxLen = ini_getd("Box", "BoxLen", 0., fname);
 
      pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
 
@@ -222,29 +223,36 @@ int readFieldFileDataSet(double **box, int *N, double *box_len,
     /* Open the hdf5 file */
     hid_t h_file = H5Fopen(fname, H5F_ACC_RDONLY, H5P_DEFAULT);
 
-    /* Open the Header group */
-    hid_t h_grp = H5Gopen(h_file, "Header", H5P_DEFAULT);
+    /* Check if the Header group exists */
+    hid_t h_status = H5Eset_auto1(NULL, NULL);  //turn off error printing
+    h_status = H5Gget_objinfo(h_file, "/Header", 0, NULL);
 
-    /* Read the size of the field */
-    hid_t h_attr, h_err;
-    double boxsize[3];
+    /* If the group exists. */
+    if (h_status == 0) {
+        /* Open the Header group */
+        hid_t h_grp = H5Gopen(h_file, "Header", H5P_DEFAULT);
 
-    /* Open and read out the attribute */
-    h_attr = H5Aopen(h_grp, "BoxSize", H5P_DEFAULT);
-    h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &boxsize);
-    if (h_err < 0) {
-        printf("Error reading hdf5 attribute '%s'.\n", "BoxSize");
-        return 1;
+        /* Read the size of the field */
+        hid_t h_attr, h_err;
+        double boxsize[3];
+
+        /* Open and read out the attribute */
+        h_attr = H5Aopen(h_grp, "BoxSize", H5P_DEFAULT);
+        h_err = H5Aread(h_attr, H5T_NATIVE_DOUBLE, &boxsize);
+        if (h_err < 0) {
+            printf("Error reading hdf5 attribute '%s'.\n", "BoxSize");
+            return 1;
+        }
+
+        /* It should be a cube */
+        assert(boxsize[0] == boxsize[1]);
+        assert(boxsize[1] == boxsize[2]);
+        *box_len = boxsize[0];
+
+        /* Close the attribute, and the Header group */
+        H5Aclose(h_attr);
+        H5Gclose(h_grp);
     }
-
-    /* It should be a cube */
-    assert(boxsize[0] == boxsize[1]);
-    assert(boxsize[1] == boxsize[2]);
-    *box_len = boxsize[0];
-
-    /* Close the attribute, and the Header group */
-    H5Aclose(h_attr);
-    H5Gclose(h_grp);
 
     /* Open the Field dataset */
     hid_t h_data = H5Dopen2(h_file, dset_name, H5P_DEFAULT);
@@ -284,7 +292,7 @@ int readFieldFileDataSet(double **box, int *N, double *box_len,
     H5Sselect_hyperslab(h_space, H5S_SELECT_SET, space_offset, NULL, space_dims, NULL);
 
     /* Read out the data */
-    h_err = H5Dread(h_data, H5T_NATIVE_DOUBLE, h_memspace, h_space, H5P_DEFAULT, *box);
+    hid_t h_err = H5Dread(h_data, H5T_NATIVE_DOUBLE, h_memspace, h_space, H5P_DEFAULT, *box);
     if (h_err < 0) {
         printf("Error reading hdf5 file '%s'.\n", fname);
         return 1;

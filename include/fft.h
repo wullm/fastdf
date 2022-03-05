@@ -34,7 +34,7 @@ struct kernel {
     double kx,ky,kz;
     double k;
     /* Value of the kernel at this k */
-    double complex kern;
+    double _Complex kern;
     /* Optional extra parameters */
     const void *params;
 };
