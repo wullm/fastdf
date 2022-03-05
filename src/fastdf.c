@@ -53,7 +53,6 @@ int main(int argc, char *argv[]) {
 
     struct params pars;
     struct units us;
-    struct cosmology cosmo = {0};
     struct perturb_data ptdat;
     struct perturb_spline spline;
     struct perturb_params ptpars;
@@ -84,23 +83,15 @@ int main(int argc, char *argv[]) {
         #endif
     }
 
-    /* Store cosmological parameters */
-    cosmo.a_begin = pars.ScaleFactorBegin;
-    cosmo.a_end = pars.ScaleFactorEnd;
-    cosmo.log_a_begin = log(cosmo.a_begin);
-    cosmo.log_a_end = log(cosmo.a_end);
+    /* Integration limits */
+    double a_begin = pars.ScaleFactorBegin;
+    double a_end = pars.ScaleFactorEnd;
+    double a_factor = 1.0 + pars.ScaleFactorStep;
 
-    cosmo.h = ptpars.h;
-    cosmo.H_0 = cosmo.h * 100 * KM_METRES / MPC_METRES * us.UnitTimeSeconds;
-    cosmo.Omega_m = ptpars.Omega_m;
-    cosmo.Omega_k = ptpars.Omega_k;
-    cosmo.Omega_lambda = ptpars.Omega_lambda;
-    // cosmo.Omega_r = ptpars.Omega_ur;
-    cosmo.Omega_r = 1 - cosmo.Omega_m - cosmo.Omega_k - cosmo.Omega_lambda;
-    cosmo.rho_crit = 3 * cosmo.H_0 * cosmo.H_0 / (8. * M_PI * us.GravityG);
-
-    /* Compute cosmological tables (kick and drift factors) */
-    intregateCosmologyTables(&cosmo);
+    const double h = ptpars.h;
+    const double H_0 = h * 100 * KM_METRES / MPC_METRES * us.UnitTimeSeconds;
+    const double Omega_m = ptpars.Omega_m;
+    const double rho_crit = 3.0 * H_0 * H_0 / (8. * M_PI * us.GravityG);
 
     /* Package physical constants */
     const double m_eV = ptpars.M_ncdm_eV[0];
@@ -133,8 +124,8 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    message(rank, "a_begin = %.3e (z = %.2f)\n", cosmo.a_begin, 1./cosmo.a_begin - 1);
-    message(rank, "a_end = %.3e (z = %.2f)\n", cosmo.a_end, 1./cosmo.a_end - 1);
+    message(rank, "a_begin = %.3e (z = %.2f)\n", a_begin, 1./a_begin - 1);
+    message(rank, "a_end = %.3e (z = %.2f)\n", a_end, 1./a_end - 1);
 
     const char use_alternative_eom = pars.AlternativeEquations;
     if (use_alternative_eom) {
@@ -202,7 +193,7 @@ int main(int argc, char *argv[]) {
         message(rank, "\nUndoing the monofonIC normalization.\n");
 
         /* Apply the correct normalization, relative to monofonIC */
-        const double norm = pow(cosmo.h / (2.0 * M_PI), 1.5);
+        const double norm = pow(h / (2.0 * M_PI), 1.5);
         message(rank, "Normalizing by %g.\n", norm);
 
         for (int i = 0; i < N * N * N; i++) {
@@ -267,7 +258,7 @@ int main(int argc, char *argv[]) {
     /* Find the present-day density, as fraction of the critical density */
     const double box_vol = BoxLen * BoxLen * BoxLen;
     const double Omega = ptdat.Omega[ptdat.tau_size * index_src + today_index];
-    const double rho = Omega * cosmo.rho_crit;
+    const double rho = Omega * rho_crit;
     const double particle_mass = rho * box_vol / pars.NumPartGenerate;
 
     header(rank, "Mass factors");
@@ -313,7 +304,7 @@ int main(int argc, char *argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    double z_begin = 1./cosmo.a_begin - 1;
+    double z_begin = 1./a_begin - 1;
     double log_tau_begin = perturbLogTauAtRedshift(&spline, z_begin);
 
     /* Allocate boxes for the initial conditions */
@@ -407,12 +398,12 @@ int main(int argc, char *argv[]) {
         p->v[2] *= 1.0 + deltaT;
 
         /* The current energy */
-        double eps_eV = hypot(p_eV/cosmo.a_begin, m_eV);
+        double eps_eV = hypot(p_eV/a_begin, m_eV);
 
         /* Apply the velocity perturbation */
-        p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_begin;
-        p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_begin;
-        p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_begin;
+        p->v[0] += vel[0] * inv_c * eps_eV * a_begin;
+        p->v[1] += vel[1] * inv_c * eps_eV * a_begin;
+        p->v[2] += vel[2] * inv_c * eps_eV * a_begin;
 
         /* Compute initial phase space density */
         p->f_i = f_i;
@@ -433,10 +424,6 @@ int main(int argc, char *argv[]) {
     header(rank, "Initiating geodesic integration.");
 
     /* Prepare integration */
-    double a_begin = cosmo.a_begin;
-    double a_end = cosmo.a_end;
-    double a_factor = 1.0 + pars.ScaleFactorStep;
-
     int MAX_ITER = (log(a_end) - log(a_begin))/log(a_factor) + 1;
 
     message(rank, "Step size %.4f\n", a_factor-1);
@@ -838,21 +825,21 @@ int main(int argc, char *argv[]) {
         header(rank, "Generating N-body gauge transformation grid");
 
         /* Compute the isentropic ratio and equation of state at a_end */
-        const double isen_ncdm = ncdm_isentropic_ratio(cosmo.a_end, m_eV, T_eV);
-        const double w_ncdm = ncdm_equation_of_state(cosmo.a_end, m_eV, T_eV);
-        message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, cosmo.a_end);
-        message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, cosmo.a_end);
+        const double isen_ncdm = ncdm_isentropic_ratio(a_end, m_eV, T_eV);
+        const double w_ncdm = ncdm_equation_of_state(a_end, m_eV, T_eV);
+        message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, a_end);
+        message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, a_end);
 
         {
             /* Final time at which to execute the gauge transformation */
-            double z_end = 1./cosmo.a_end - 1;
+            double z_end = 1./a_end - 1;
             double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
 
             /* Central difference */
-            double a_min = cosmo.a_end / 1.001;
+            double a_min = a_end / 1.001;
             double z_min =  1./a_min - 1;
             double log_tau_min = perturbLogTauAtRedshift(&spline, z_min);
-            double a_plus = cosmo.a_end * 1.001;
+            double a_plus = a_end * 1.001;
             double z_plus =  1./a_plus - 1;
             double log_tau_plus = perturbLogTauAtRedshift(&spline, z_plus);
 
@@ -911,12 +898,11 @@ int main(int argc, char *argv[]) {
             double H_min = perturbHubbleAtLogTau(&spline, log_tau_min);
             double H_plus = perturbHubbleAtLogTau(&spline, log_tau_plus);
 
-            double H_0 = cosmo.H_0;
-            double rho_crit = cosmo.rho_crit * (H * H) / (H_0 * H_0);
-            double rho_crit_min = cosmo.rho_crit * (H_min * H_min) / (H_0 * H_0);
-            double rho_crit_plus = cosmo.rho_crit * (H_plus * H_plus) / (H_0 * H_0);
+            double rho_crit_central = rho_crit * (H * H) / (H_0 * H_0);
+            double rho_crit_min = rho_crit * (H_min * H_min) / (H_0 * H_0);
+            double rho_crit_plus = rho_crit * (H_plus * H_plus) / (H_0 * H_0);
 
-            double rho_nu = Omega_nu * rho_crit;
+            double rho_nu = Omega_nu * rho_crit_central;
             double rho_nu_min = Omega_nu_min * rho_crit_min;
             double rho_nu_plus = Omega_nu_plus * rho_crit_plus;
 
@@ -998,9 +984,9 @@ int main(int argc, char *argv[]) {
             double eps_eV = hypot(p_eV/a_end, m_eV);
 
             /* Apply the velocity shift */
-            p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_end;
-            p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_end;
-            p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_end;
+            p->v[0] += vel[0] * inv_c * eps_eV * a_end;
+            p->v[1] += vel[1] * inv_c * eps_eV * a_end;
+            p->v[2] += vel[2] * inv_c * eps_eV * a_end;
         }
 
         /* Free the gauge transformation boxes */
@@ -1064,7 +1050,7 @@ int main(int argc, char *argv[]) {
         hid_t h_out_file = createFile(out_fname);
 
         /* Writing attributes into the Header & Cosmology groups */
-        int err = writeHeaderAttributes(&pars, &cosmo, &us, pars.NumPartGenerate, h_out_file);
+        int err = writeHeaderAttributes(&pars, &us, pars.NumPartGenerate, h_out_file);
         if (err > 0) exit(1);
 
         /* The ExportName */
@@ -1256,7 +1242,6 @@ int main(int argc, char *argv[]) {
 
     /* Clean up */
     cleanParams(&pars);
-    cleanCosmology(&cosmo);
     cleanPerturb(&ptdat);
     cleanPerturbParams(&ptpars);
 

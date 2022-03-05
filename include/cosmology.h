@@ -23,39 +23,6 @@
 #include <hdf5.h>
 #include "input.h"
 
-struct cosmology {
-    double h;
-    double H_0;
-    double rho_crit; //not user-specified, but inferred from h
-    double Omega_m;
-    double Omega_r;
-    double Omega_k;
-    double Omega_lambda;
-    double T_nu;
-    int N_nu;
-    double *M_nu;
-    double a_begin;
-    double a_end;
-    double log_a_begin;
-    double log_a_end;
-
-    double *drift_factor_table;
-    double *kick_factor_table;
-    double *log_a_table;
-
-    struct units *units;
-};
-
-int readCosmology(struct cosmology *cosmo, struct units *us, hid_t h_file);
-int cleanCosmology(struct cosmology *cosmo);
-
-double E_z(double a, struct cosmology *cosmo);
-int intregateCosmologyTables(struct cosmology *cosmo);
-double get_drift_factor(const struct cosmology *cosmo, const double log_a_start,
-                       const double log_a_end);
-double get_kick_factor(const struct cosmology *cosmo, const double log_a_start,
-                       const double log_a_end);
-
 double ncdm_isentropic_ratio(double a, double m, double T);
 double ncdm_equation_of_state(double a, double m, double T);
 

@@ -22,16 +22,6 @@ struct internal_units {
     const double temperature_unit_kelvin;
 };
 
-/* Physical constants in internal units */
-struct phys_const {
-    const double speed_of_light;
-    const double boltzmann_constant;
-    const double reduced_planck_constant;
-    const double electronvolt;
-    const double neutrino_temperature;
-    const double neutrino_temperature_eV;
-};
-
 /* Riemann function zeta(3) */
 #define M_ZETA_3 1.2020569031595942853997
 

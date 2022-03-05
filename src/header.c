@@ -22,9 +22,8 @@
 #include <math.h>
 #include "../include/header.h"
 
-int writeHeaderAttributes(struct params *pars, struct cosmology *cosmo,
-                          struct units *us, long long int Npart,
-                          hid_t h_file) {
+int writeHeaderAttributes(struct params *pars, struct units *us,
+                          long long int Npart, hid_t h_file) {
 
     /* Create the Header group */
     hid_t h_grp = H5Gcreate(h_file, "/Header", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -52,7 +51,7 @@ int writeHeaderAttributes(struct params *pars, struct cosmology *cosmo,
     H5Aclose(h_attr);
 
     /* Create the Redshift attribute and write the data */
-    double z_final = 1./cosmo->a_end - 1;
+    double z_final = 1./pars->ScaleFactorEnd - 1;
     h_attr = H5Acreate1(h_grp, "Redshift", H5T_NATIVE_DOUBLE, h_aspace, H5P_DEFAULT);
     H5Awrite(h_attr, H5T_NATIVE_DOUBLE, &z_final);
     H5Aclose(h_attr);
