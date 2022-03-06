@@ -64,6 +64,22 @@ int main(int argc, char *argv[]) {
     readParams(&pars, fname);
     readUnits(&us, fname);
 
+    /* Check if the output file exists */
+    char out_fname[200];
+    sprintf(out_fname, "%s/%s", pars.OutputDirectory, pars.OutputFilename);
+    int file_exists = fileExists(out_fname);
+
+    /* The ExportName for the neutrino particles */
+    const char *ExportName = pars.ExportName;
+    int group_exists = groupExists(out_fname, ExportName);
+
+    if (file_exists && group_exists) {
+        printf("Error: file already exists and has a neutrino particle group.\n");
+        exit(1);
+    } else if (file_exists && !group_exists) {
+        message(rank, "Appending neutrino particles to '%s'.\n", out_fname);
+    }
+
     /* Check if the user specified a perturbation data file or if CLASS
      * is to be run. If so, FastDF must be compiled with CLASS. */
     if (pars.PerturbFile[0] != '\0') {
@@ -1050,16 +1066,20 @@ int main(int argc, char *argv[]) {
 
     header(rank, "Prepare output");
 
-    char out_fname[200];
-    sprintf(out_fname, "%s/%s", pars.OutputDirectory, pars.OutputFilename);
-
     if (rank == 0) {
-        /* Create the output file */
-        hid_t h_out_file = createFile(out_fname);
+        /* Create the output file if it does not exist */
+        hid_t h_out_file;
+        if (!fileExists(out_fname)) {
+            /* Create the file */
+            h_out_file = createFile(out_fname);
 
-        /* Writing attributes into the Header & Cosmology groups */
-        int err = writeHeaderAttributes(&pars, &us, pars.NumPartGenerate, h_out_file);
-        if (err > 0) exit(1);
+            /* Writing attributes into the Header & Cosmology groups */
+            int err = writeHeaderAttributes(&pars, &us, pars.NumPartGenerate, h_out_file);
+            if (err > 0) exit(1);
+        } else {
+            /* Otherwise, open the file in read & write mode */
+            h_out_file = H5Fopen(out_fname, H5F_ACC_RDWR , H5P_DEFAULT);
+        }
 
         /* The ExportName */
         const char *ExportName = pars.ExportName;

@@ -109,6 +109,8 @@ int readFieldFileDataSet(double **box, int *N, double *box_len,
 
 int readFieldFile_MPI(double **box, int *N, double *box_len, MPI_Comm comm,
                       const char *fname);
+int fileExists(const char *fname);
+int groupExists(const char *fname, const char *group_name);
 
 static inline void generateFieldFilename(const struct params *pars, char *fname,
                                          const char *Identifier, const char *title,

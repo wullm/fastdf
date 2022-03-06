@@ -408,6 +408,39 @@ int readFieldFile_MPI(double **box, int *N, double *box_len, MPI_Comm comm,
     return 0;
 }
 
+
+int fileExists(const char *fname) {
+    int exists = 0;
+    H5E_BEGIN_TRY
+    hid_t h_file = H5Fopen(fname, H5F_ACC_RDONLY , H5P_DEFAULT);
+    if (h_file >= 0 ) {
+        exists = 1;
+    }
+    H5Fclose(h_file);
+    H5E_END_TRY
+
+    return exists;
+}
+
+int groupExists(const char *fname, const char *group_name) {
+    int exists = 0;
+
+    H5E_BEGIN_TRY
+    /* Try to open the file */
+    hid_t h_file = H5Fopen(fname, H5F_ACC_RDONLY , H5P_DEFAULT);
+    /* If the file exists, try to open the group */
+    if (h_file >= 0 ) {
+        hid_t h_status = H5Gget_objinfo(h_file, group_name, 0, NULL);
+        if (h_status == 0) {
+            exists = 1;
+        }
+    }
+    H5Fclose(h_file);
+    H5E_END_TRY
+
+    return exists;
+}
+
 // hid_t openFile_MPI(MPI_Comm comm, const char *fname) {
 //     /* Property list for MPI file access */
 //     hid_t prop_faxs = H5Pcreate(H5P_FILE_ACCESS);
