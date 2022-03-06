@@ -140,6 +140,20 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    /* Check if we recognize the output velocity type */
+    int velocity_type = 0;
+    if (strcmp(pars.VelocityType, "peculiar") == 0 ||
+        strcmp(pars.VelocityType, "Peculiar") == 0) {
+        message(rank, "Output velocities: peculiar (a*dx/dt)\n");
+    } else if (strcmp(pars.VelocityType, "Gadget") == 0 ||
+               strcmp(pars.VelocityType, "gadget") == 0) {
+        message(rank, "Output velocities: Gadget (a^.5*dx/dt)\n");
+        velocity_type = 1;
+    } else {
+        printf("Error: unknown output velocity type '%s'.\n", pars.VelocityType);
+        exit(1);
+    }
+
     message(rank, "a_begin = %.3e (z = %.2f)\n", a_begin, 1./a_begin - 1);
     message(rank, "a_end = %.3e (z = %.2f)\n", a_end, 1./a_end - 1);
 
@@ -1062,6 +1076,13 @@ int main(int argc, char *argv[]) {
         p->v[0] /= a_end;
         p->v[1] /= a_end;
         p->v[2] /= a_end;
+
+        /* Possibly convert to Gadget velocities */
+        if (velocity_type == 1) {
+            p->v[0] /= sqrt(a_end);
+            p->v[1] /= sqrt(a_end);
+            p->v[2] /= sqrt(a_end);
+        }
     }
 
     header(rank, "Prepare output");

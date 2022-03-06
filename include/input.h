@@ -77,6 +77,7 @@ struct params {
     char *InputDirectory;
     char *InputFilename;
     char *ExportName;
+    char *VelocityType;
     char OutputFields;
 
     /* MPI rank (generated automatically) */
