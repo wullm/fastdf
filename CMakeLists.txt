@@ -2,6 +2,20 @@ cmake_minimum_required(VERSION 3.11)
 project(fastdf VERSION 1.0.0 DESCRIPTION "Code for neutrino particle initial conditions")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# The root directory of the CLASS installation.
+# The default path should work when CLASS and FastDF are both loaded as
+# submodules for monofonIC. If FastDF is used as a stand-alone code, use
+# the more general autotools configuration script on the main branch.
+set(SEARCH_CLASS_PATH "../class-src/" CACHE STRING "Root directory of CLASS installation")
+message(STATUS "SEARCH_CLASS_PATH = ${SEARCH_CLASS_PATH}")
+
+# The CLASS include directories (as of CLASS v3.1.2)
+set(CLASS_INCLUDES )
+list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/include)
+list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/heating)
+list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/HyRec2020)
+list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/RecfastCLASS)
+
 # OpenMP
 find_package(OpenMP REQUIRED)
 if(OPENMP_FOUND)
@@ -19,7 +33,6 @@ if(ENABLE_MPI)
     message(STATUS "MPI_C_LIBRARIES = ${MPI_C_LIBRARIES}")
   endif(MPI_C_FOUND)
 endif(ENABLE_MPI)
-
 
 find_package(GSL REQUIRED)
 mark_as_advanced(pkgcfg_lib_GSL_gsl pkgcfg_lib_GSL_gslcblas pkgcfg_lib_GSL_m)
@@ -44,75 +57,12 @@ target_include_directories(fastdf_static PUBLIC include)
 target_link_libraries(fastdf_static PRIVATE ${HDF5_LIBRARIES})
 target_include_directories(fastdf_static PRIVATE ${HDF5_INCLUDE_DIRS})
 target_compile_definitions(fastdf_static PRIVATE "USE_HDF5")
-
-# Shared library
-add_library(fastdf_shared SHARED ${fastdf_SOURCES})
-add_library(fastdf::fastdf_shared ALIAS fastdf_shared)
-set_target_properties(fastdf_shared PROPERTIES OUTPUT_NAME fastdf)
-set_target_properties(fastdf_shared PROPERTIES C_STANDARD 11)
-set_property(TARGET fastdf_shared PROPERTY POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(fastdf_shared PRIVATE m)
-target_link_libraries(fastdf_shared PRIVATE GSL::gsl)
-target_include_directories(fastdf_shared PUBLIC include)
-target_link_libraries(fastdf_shared PRIVATE ${HDF5_LIBRARIES})
-target_include_directories(fastdf_shared PRIVATE ${HDF5_INCLUDE_DIRS})
-target_compile_definitions(fastdf_shared PRIVATE "USE_HDF5")
-
-# Force compilation with CLASS
-target_compile_definitions(fastdf_static PRIVATE "WITH_CLASS")
-target_compile_definitions(fastdf_shared PRIVATE "WITH_CLASS")
-
-set(SEARCH_CLASS_PATH ../class-src/)
-set(CLASS_INCLUDES )
-list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/include)
-list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/heating)
-list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/HyRec2020)
-list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/RecfastCLASS)
-
 target_include_directories(fastdf_static PRIVATE ${CLASS_INCLUDES})
-target_include_directories(fastdf_shared PRIVATE ${CLASS_INCLUDES})
-message(STATUS "SEARCH_CLASS_PATH = ${SEARCH_CLASS_PATH}")
+target_compile_definitions(fastdf_static PRIVATE "WITH_CLASS")
 
 # mpi flags
 if(MPI_C_FOUND)
-  if(CODE_PRECISION STREQUAL "FLOAT")
-    if(FFTW3_SINGLE_MPI_FOUND)
-      target_link_libraries(fastdf_static PRIVATE FFTW3::FFTW3_SINGLE_MPI)
-      target_compile_definitions(fastdf_static PRIVATE "USE_FFTW_MPI")
-      target_link_libraries(fastdf_shared PRIVATE FFTW3::FFTW3_SINGLE_MPI)
-      target_compile_definitions(fastdf_shared PRIVATE "USE_FFTW_MPI")
-    else()
-      message(SEND_ERROR "MPI enabled but FFTW3 library not found with MPI support for single precision!")
-    endif()
-  elseif(CODE_PRECISION STREQUAL "DOUBLE")
-    if(FFTW3_DOUBLE_MPI_FOUND)
-      target_link_libraries(fastdf_static PRIVATE FFTW3::FFTW3_DOUBLE_MPI)
-      target_compile_definitions(fastdf_static PRIVATE "USE_FFTW_MPI")
-      target_link_libraries(fastdf_shared PRIVATE FFTW3::FFTW3_DOUBLE_MPI)
-      target_compile_definitions(fastdf_shared PRIVATE "USE_FFTW_MPI")
-    else()
-      message(SEND_ERROR "MPI enabled but FFTW3 library not found with MPI support for double precision!")
-    endif()
-  elseif(CODE_PRECISION STREQUAL "LONGDOUBLE")
-    if(FFTW3_LONGDOUBLE_MPI_FOUND)
-      target_link_libraries(fastdf_static PRIVATE FFTW3::FFTW3_LONGDOUBLE_MPI)
-      target_compile_definitions(fastdf_static PRIVATE "USE_FFTW_MPI")
-      target_link_libraries(fastdf_shared PRIVATE FFTW3::FFTW3_LONGDOUBLE_MPI)
-      target_compile_definitions(fastdf_shared PRIVATE "USE_FFTW_MPI")
-    else()
-      message(SEND_ERROR "MPI enabled but FFTW3 library not found with MPI support for long double precision!")
-    endif()
-  endif()
-
   target_link_libraries(fastdf_static PRIVATE MPI::MPI_C)
   target_compile_definitions(fastdf_static PRIVATE "USE_MPI")
   target_include_directories(fastdf_static PRIVATE ${MPI_C_INCLUDE_PATH})
-  target_link_libraries(fastdf_shared PRIVATE MPI::MPI_C)
-  target_compile_definitions(fastdf_shared PRIVATE "USE_MPI")
-  target_include_directories(fastdf_shared PRIVATE ${MPI_C_INCLUDE_PATH})
-  
-  message(STATUS "HERE")
 endif(MPI_C_FOUND)
-
-
-#add_executable(fastdf ${fastdf_SOURCES})
