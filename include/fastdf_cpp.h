@@ -44,7 +44,7 @@ extern "C" {
 #include "classex.h"
 #endif
 
-int run_fastdf();
+int run_fastdf(struct params *pars, struct units *us);
 
 #ifdef __cplusplus
 }

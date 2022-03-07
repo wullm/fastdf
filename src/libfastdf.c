@@ -27,9 +27,7 @@
 
 #include "../include/fastdf.h"
 
-int run_fastdf() {
-    
-    const char fname[50] = "/home/willem/monofonic8/monofonic/test/fastdf.ini";
+int run_fastdf(struct params *pars, struct units *us) {
     
     /* Initialize MPI for distributed memory parallelization */
     // MPI_Init(&argc, &argv);
@@ -43,32 +41,25 @@ int run_fastdf() {
     /* Read options */
     // const char *fname = "/home/willem/fastdf5/fastdf/default.ini";
     header(rank, "FastDF Neutrino Initial Condition Generator");
-    message(rank, "The parameter file is %s\n", fname);
 
     /* Timer */
     struct timeval time_stop, time_start;
     gettimeofday(&time_start, NULL);
 
-    struct params pars;
-    struct units us;
     struct perturb_data ptdat;
     struct perturb_spline spline;
     struct perturb_params ptpars;
 
     /* Store the MPI rank */
-    pars.rank = rank;
+    pars->rank = rank;
 
-    /* Read parameter file for parameters, units */
-    readParams(&pars, fname);
-    readUnits(&us, fname);
-    
     /* Check if the output file exists */
     char out_fname[200];
-    sprintf(out_fname, "%s/%s", pars.OutputDirectory, pars.OutputFilename);
+    sprintf(out_fname, "%s/%s", pars->OutputDirectory, pars->OutputFilename);
     int file_exists = fileExists(out_fname);
 
     /* The ExportName for the neutrino particles */
-    const char *ExportName = pars.ExportName;
+    const char *ExportName = pars->ExportName;
     int group_exists = groupExists(out_fname, ExportName);
 
     if (file_exists && group_exists) {
@@ -80,14 +71,14 @@ int run_fastdf() {
 
     /* Check if the user specified a perturbation data file or if CLASS
      * is to be run. If so, FastDF must be compiled with CLASS. */
-    if (pars.PerturbFile[0] != '\0') {
+    if (pars->PerturbFile[0] != '\0') {
         /* Read the perturbation data file */
-        readPerturb(&pars, &us, &ptdat);
-        readPerturbParams(&pars, &us, &ptpars);
+        readPerturb(pars, us, &ptdat);
+        readPerturbParams(pars, us, &ptpars);
     } else {
         /* Run CLASS */
         #ifdef WITH_CLASS
-        run_class(&ptdat, &us, &ptpars, pars.ClassIniFile);
+        run_class(&ptdat, us, &ptpars, pars->ClassIniFile);
         #else
         printf("\n");
         printf("Error: Not compiled with CLASS.\n");
@@ -98,21 +89,21 @@ int run_fastdf() {
     }
 
     /* Integration limits */
-    double a_begin = pars.ScaleFactorBegin;
-    double a_end = pars.ScaleFactorEnd;
-    double a_factor = 1.0 + pars.ScaleFactorStep;
+    double a_begin = pars->ScaleFactorBegin;
+    double a_end = pars->ScaleFactorEnd;
+    double a_factor = 1.0 + pars->ScaleFactorStep;
 
     const double h = ptpars.h;
-    const double H_0 = h * 100 * KM_METRES / MPC_METRES * us.UnitTimeSeconds;
-    const double rho_crit = 3.0 * H_0 * H_0 / (8. * M_PI * us.GravityG);
+    const double H_0 = h * 100 * KM_METRES / MPC_METRES * us->UnitTimeSeconds;
+    const double rho_crit = 3.0 * H_0 * H_0 / (8. * M_PI * us->GravityG);
 
     /* Package physical constants */
     const double m_eV = ptpars.M_ncdm_eV[0];
     const double T_nu = ptpars.T_ncdm[0] * ptpars.T_CMB;
-    const double T_eV = T_nu * us.kBoltzmann / us.ElectronVolt;
+    const double T_eV = T_nu * us->kBoltzmann / us->ElectronVolt;
 
     /* Retrieve further physical constant */
-    const double c = us.SpeedOfLight;
+    const double c = us->SpeedOfLight;
     const double inv_c = 1.0 / c;
     const double inv_c2 = inv_c * inv_c;
 
@@ -120,41 +111,41 @@ int run_fastdf() {
     initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
 
     header(rank, "Simulation parameters");
-    message(rank, "We want %lld (%d^3) particles\n", pars.NumPartGenerate, pars.CubeRootNumber);
+    message(rank, "We want %lld (%d^3) particles\n", pars->NumPartGenerate, pars->CubeRootNumber);
 
     /* Check if we recognize the output gauge */
     int gauge_Nbody = 0;
-    if (strcmp(pars.Gauge, "Newtonian") == 0 ||
-        strcmp(pars.Gauge, "newtonian") == 0) {
+    if (strcmp(pars->Gauge, "Newtonian") == 0 ||
+        strcmp(pars->Gauge, "newtonian") == 0) {
         message(rank, "Output gauge: Newtonian\n");
-    } else if (strcmp(pars.Gauge, "N-body") == 0 ||
-               strcmp(pars.Gauge, "n-body") == 0 ||
-               strcmp(pars.Gauge, "nbody") == 0) {
+    } else if (strcmp(pars->Gauge, "N-body") == 0 ||
+               strcmp(pars->Gauge, "n-body") == 0 ||
+               strcmp(pars->Gauge, "nbody") == 0) {
         message(rank, "Output gauge: N-body\n");
         gauge_Nbody = 1;
     } else {
-        printf("Error: unknown output gauge '%s'.\n", pars.Gauge);
+        printf("Error: unknown output gauge '%s'.\n", pars->Gauge);
         exit(1);
     }
 
     /* Check if we recognize the output velocity type */
     int velocity_type = 0;
-    if (strcmp(pars.VelocityType, "peculiar") == 0 ||
-        strcmp(pars.VelocityType, "Peculiar") == 0) {
+    if (strcmp(pars->VelocityType, "peculiar") == 0 ||
+        strcmp(pars->VelocityType, "Peculiar") == 0) {
         message(rank, "Output velocities: peculiar (a*dx/dt)\n");
-    } else if (strcmp(pars.VelocityType, "Gadget") == 0 ||
-               strcmp(pars.VelocityType, "gadget") == 0) {
+    } else if (strcmp(pars->VelocityType, "Gadget") == 0 ||
+               strcmp(pars->VelocityType, "gadget") == 0) {
         message(rank, "Output velocities: Gadget (a^.5*dx/dt)\n");
         velocity_type = 1;
     } else {
-        printf("Error: unknown output velocity type '%s'.\n", pars.VelocityType);
+        printf("Error: unknown output velocity type '%s'.\n", pars->VelocityType);
         exit(1);
     }
 
     message(rank, "a_begin = %.3e (z = %.2f)\n", a_begin, 1./a_begin - 1);
     message(rank, "a_end = %.3e (z = %.2f)\n", a_end, 1./a_end - 1);
 
-    const char use_alternative_eom = pars.AlternativeEquations;
+    const char use_alternative_eom = pars->AlternativeEquations;
     if (use_alternative_eom) {
         message(rank, "\n\n");
         message(rank, "WARNING: Using alternative equations of motion!");
@@ -167,25 +158,25 @@ int run_fastdf() {
     int N;
 
     header(rank, "Random phases");
-    message(rank, "Reading Gaussian random field from %s (dataset %s).\n", pars.GaussianRandomFieldFile, pars.GaussianRandomFieldDataset);
+    message(rank, "Reading Gaussian random field from %s (dataset %s).\n", pars->GaussianRandomFieldFile, pars->GaussianRandomFieldDataset);
 
-    readFieldFileDataSet(&box, &N, &BoxLen, pars.GaussianRandomFieldFile, pars.GaussianRandomFieldDataset);
-    // readFieldFile(&box, &N, &BoxLen, pars.GaussianRandomFieldFile);
-    // readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.GaussianRandomFieldFile);
+    readFieldFileDataSet(&box, &N, &BoxLen, pars->GaussianRandomFieldFile, pars->GaussianRandomFieldDataset);
+    // readFieldFile(&box, &N, &BoxLen, pars->GaussianRandomFieldFile);
+    // readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars->GaussianRandomFieldFile);
 
     /* Override the box length? */
     if (BoxLen > 0.) {
-        pars.BoxLen = BoxLen;
+        pars->BoxLen = BoxLen;
     } else {
         /* Otherwise, look for a user-specified value */
-        BoxLen = pars.BoxLen;
+        BoxLen = pars->BoxLen;
     }
 
     message(rank, "BoxLen = %.2f U_L\n", BoxLen);
     message(rank, "GridSize = %d\n", N);
 
     /* Do we want to invert the field for paired simulations? */
-    if (pars.InvertField) {
+    if (pars->InvertField) {
         message(rank, "Inverting input field.\n");
         for (int i = 0; i < N * N * N; i++) {
             box[i] *= -1.0;
@@ -210,7 +201,7 @@ int run_fastdf() {
     message(rank, "Variance = %.10g\n", var);
 
     /* Do we want to normalize the Gaussian field? */
-    if (pars.NormalizeGaussianField) {
+    if (pars->NormalizeGaussianField) {
         message(rank, "\nNormalizing the input field.\n");
 
         /* Set the variance to 1.0, then apply the correct normalization */
@@ -224,7 +215,7 @@ int run_fastdf() {
     }
 
     /* Do we want to correct the Monofonic normalization? */
-    if (pars.AssumeMonofonicNormalization) {
+    if (pars->AssumeMonofonicNormalization) {
         message(rank, "\nUndoing the monofonIC normalization.\n");
 
         /* Apply the correct normalization, relative to monofonIC */
@@ -245,11 +236,11 @@ int run_fastdf() {
     fftw_destroy_plan(r2c);
 
     /* Do we need to apply the primordial power spectrum? */
-    if (pars.NormalizeGaussianField || pars.AssumeMonofonicNormalization) {
+    if (pars->NormalizeGaussianField || pars->AssumeMonofonicNormalization) {
         struct power_spectrum ps;
-        ps.A_s = pars.PrimordialScalarAmplitude;
-        ps.n_s = pars.PrimordialSpectralIndex;
-        ps.k_pivot = pars.PrimordialPivotScale;
+        ps.A_s = pars->PrimordialScalarAmplitude;
+        ps.n_s = pars->PrimordialSpectralIndex;
+        ps.k_pivot = pars->PrimordialPivotScale;
 
         message(rank, "\nApplying primodial power spectrum with\n");
         message(rank, "A_s = %.5e\n", ps.A_s);
@@ -264,7 +255,7 @@ int run_fastdf() {
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
 
     /* Find the relevant density title among the transfer functions */
-    char *title = pars.TransferFunctionDensity;
+    char *title = pars->TransferFunctionDensity;
     int index_src = findTitle(ptdat.titles, title, ptdat.n_functions);
     if (index_src < 0) {
         printf("Error: transfer function '%s' not found (%d).\n", title, index_src);
@@ -294,20 +285,20 @@ int run_fastdf() {
     const double box_vol = BoxLen * BoxLen * BoxLen;
     const double Omega = ptdat.Omega[ptdat.tau_size * index_src + today_index];
     const double rho = Omega * rho_crit;
-    const double particle_mass = rho * box_vol / pars.NumPartGenerate;
+    const double particle_mass = rho * box_vol / pars->NumPartGenerate;
 
     header(rank, "Mass factors");
     message(rank, "Neutrino mass is %f eV\n", m_eV);
     message(rank, "Particle mass is %f U_M\n", particle_mass);
 
     /* Store the Box Length */
-    pars.BoxLen = BoxLen;
+    pars->BoxLen = BoxLen;
 
     /* Determine the number of particle to be generated on each rank */
     header(rank, "Particle distribution");
 
     /* The particle number is M^3 */
-    long long M = pars.CubeRootNumber;
+    long long M = pars->CubeRootNumber;
 
     /* Determine what particles belong to this slice */
     double fac = (double) M / MPI_Rank_Count;
@@ -335,7 +326,7 @@ int run_fastdf() {
                                            sizeof(struct particle_ext));
 
     /* ID of the first particle on this node */
-    long long firstID = pars.FirstID + localFirstNumber;
+    long long firstID = pars->FirstID + localFirstNumber;
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -385,13 +376,13 @@ int run_fastdf() {
             box_tic[i] *= 0.5 * exp(log_tau_begin);
         }
 
-        if (rank == 0 && pars.OutputFields) {
+        if (rank == 0 && pars->OutputFields) {
             char dnu_fname[50];
-            sprintf(dnu_fname, "%s/ic_dnu.hdf5", pars.OutputDirectory);
+            sprintf(dnu_fname, "%s/ic_dnu.hdf5", pars->OutputDirectory);
             writeFieldFile(box_dic, N, BoxLen, dnu_fname);
 
             char tnu_fname[50];
-            sprintf(tnu_fname, "%s/ic_tnu.hdf5", pars.OutputDirectory);
+            sprintf(tnu_fname, "%s/ic_tnu.hdf5", pars->OutputDirectory);
             writeFieldFile(box_tic, N, BoxLen, tnu_fname);
         }
 
@@ -408,10 +399,10 @@ int run_fastdf() {
         uint64_t id = i + firstID;
 
         /* Generate random particle velocity and position */
-        init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, &us, T_eV);
+        init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, us, T_eV);
 
         /* Compute the momentum in eV */
-        const double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+        const double p_eV = fermi_dirac_momentum(p->v, m_eV, us->SpeedOfLight);
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         if (i==0)
@@ -466,13 +457,13 @@ int run_fastdf() {
     message(rank, "\n");
 
     /* We will re-compute the potentials when they have changed a certain amount */
-    const double recompute_trigger = pars.RecomputeTrigger;
+    const double recompute_trigger = pars->RecomputeTrigger;
     double k_ref;  // 1 / U_L (reference scale)
-    if (pars.RecomputeScaleRef <= 0.0) {
+    if (pars->RecomputeScaleRef <= 0.0) {
         /* Set equal to the smallest scale that will be needed */
         k_ref = 2.0 * M_PI * sqrt(3.0) * N / BoxLen;
     } else {
-        k_ref = pars.RecomputeScaleRef;
+        k_ref = pars->RecomputeScaleRef;
     }
 
     message(rank, "Recompute trigger: %f\n", recompute_trigger);
@@ -666,17 +657,17 @@ int run_fastdf() {
             box_phi_dot[i] = (box_phi1[i] - box_phi0[i]) * inv_delta_tau;
         }
 
-        if (rank == 0 && ((pars.OutputFields > 1 && recompute) || (pars.OutputFields > 2 && ITER % 10 == 0))) {
+        if (rank == 0 && ((pars->OutputFields > 1 && recompute) || (pars->OutputFields > 2 && ITER % 10 == 0))) {
             char psi_fname[50];
-            sprintf(psi_fname, "%s/psi_%d.hdf5", pars.OutputDirectory, ITER);
+            sprintf(psi_fname, "%s/psi_%d.hdf5", pars->OutputDirectory, ITER);
             writeFieldFile(box_psi, N, BoxLen, psi_fname);
 
             char phi_fname[50];
-            sprintf(phi_fname, "%s/phi_%d.hdf5", pars.OutputDirectory, ITER);
+            sprintf(phi_fname, "%s/phi_%d.hdf5", pars->OutputDirectory, ITER);
             writeFieldFile(box_phi, N, BoxLen, phi_fname);
 
             char phi_dot_fname[50];
-            sprintf(phi_dot_fname, "%s/phi_dot_%d.hdf5", pars.OutputDirectory, ITER);
+            sprintf(phi_dot_fname, "%s/phi_dot_%d.hdf5", pars->OutputDirectory, ITER);
             writeFieldFile(box_phi_dot, N, BoxLen, phi_dot_fname);
         }
 
@@ -834,7 +825,7 @@ int run_fastdf() {
             }
 
             /* Compute summary statistic */
-            I_df *= 0.5 / pars.NumPartGenerate * weight_compute_invfreq;
+            I_df *= 0.5 / pars->NumPartGenerate * weight_compute_invfreq;
 
             message(rank, "%04d] %.2e %.2e %e %d\n", ITER, a, 1./a-1, I_df, recompute);
         }
@@ -961,9 +952,9 @@ int run_fastdf() {
             fft_normalize_c2r(box_dshift, N, BoxLen);
             fftw_destroy_plan(c2r);
 
-            if (rank == 0 && pars.OutputFields) {
+            if (rank == 0 && pars->OutputFields) {
                 char density_fname[50];
-                sprintf(density_fname, "%s/gauge_dshift.hdf5", pars.OutputDirectory);
+                sprintf(density_fname, "%s/gauge_dshift.hdf5", pars->OutputDirectory);
                 writeFieldFile(box_dshift, N, BoxLen, density_fname);
             }
 
@@ -982,9 +973,9 @@ int run_fastdf() {
             fft_normalize_c2r(box_tshift, N, BoxLen);
             fftw_destroy_plan(c2r3);
 
-            if (rank == 0 && pars.OutputFields) {
+            if (rank == 0 && pars->OutputFields) {
                 char vshift_fname[50];
-                sprintf(vshift_fname, "%s/gauge_vshift.hdf5", pars.OutputDirectory);
+                sprintf(vshift_fname, "%s/gauge_vshift.hdf5", pars->OutputDirectory);
                 writeFieldFile(box_tshift, N, BoxLen, vshift_fname);
             }
 
@@ -1015,7 +1006,7 @@ int run_fastdf() {
             p->v[2] *= 1 - deltaT;
 
             /* The current energy */
-            double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+            double p_eV = fermi_dirac_momentum(p->v, m_eV, us->SpeedOfLight);
             double eps_eV = hypot(p_eV/a_end, m_eV);
 
             /* Apply the velocity shift */
@@ -1042,7 +1033,7 @@ int run_fastdf() {
         struct particle_ext *p = &genparts[i];
 
         /* Compute the energy & weight (needs to happen before converting the velocities!)*/
-        double p_eV = fermi_dirac_momentum(p->v, m_eV, us.SpeedOfLight);
+        double p_eV = fermi_dirac_momentum(p->v, m_eV, us->SpeedOfLight);
         double eps_eV = hypot(p_eV/a_end, m_eV);
         double eps = particle_mass / m_eV * eps_eV;
         double f = fermi_dirac_density(p_eV, T_eV);
@@ -1092,7 +1083,7 @@ int run_fastdf() {
             h_out_file = createFile(out_fname);
 
             /* Writing attributes into the Header & Cosmology groups */
-            int err = writeHeaderAttributes(&pars, &us, pars.NumPartGenerate, h_out_file);
+            int err = writeHeaderAttributes(pars, us, pars->NumPartGenerate, h_out_file);
             if (err > 0) exit(1);
         } else {
             /* Otherwise, open the file in read & write mode */
@@ -1100,7 +1091,7 @@ int run_fastdf() {
         }
 
         /* The ExportName */
-        const char *ExportName = pars.ExportName;
+        const char *ExportName = pars->ExportName;
 
         /* The particle group in the output file */
         hid_t h_grp;
@@ -1110,12 +1101,12 @@ int run_fastdf() {
 
         /* Vector dataspace (e.g. positions, velocities) */
         const hsize_t vrank = 2;
-        const hsize_t vdims[2] = {pars.NumPartGenerate, 3};
+        const hsize_t vdims[2] = {pars->NumPartGenerate, 3};
         hid_t h_vspace = H5Screate_simple(vrank, vdims, NULL);
 
         /* Scalar dataspace (e.g. masses, particle ids) */
         const hsize_t srank = 1;
-        const hsize_t sdims[1] = {pars.NumPartGenerate};
+        const hsize_t sdims[1] = {pars->NumPartGenerate};
         hid_t h_sspace = H5Screate_simple(srank, sdims, NULL);
 
         /* Set chunking for vectors */
@@ -1129,7 +1120,7 @@ int run_fastdf() {
         H5Pset_chunk(h_prop_sca, srank, schunk);
 
         /* Create the particle group in the output file */
-        printf("Creating Group '%s' with %lld particles.\n", ExportName, pars.NumPartGenerate);
+        printf("Creating Group '%s' with %lld particles.\n", ExportName, pars->NumPartGenerate);
         h_grp = H5Gcreate(h_out_file, ExportName, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
         /* Coordinates (use vector space) */
@@ -1177,7 +1168,7 @@ int run_fastdf() {
 #endif
 
     /* The particle group in the output file */
-    hid_t h_grp = H5Gopen(h_out_file, pars.ExportName, H5P_DEFAULT);
+    hid_t h_grp = H5Gopen(h_out_file, pars->ExportName, H5P_DEFAULT);
 
     /* Datsets */
     hid_t h_data;
@@ -1291,7 +1282,7 @@ int run_fastdf() {
     // MPI_Finalize();
 
     /* Clean up */
-    cleanParams(&pars);
+    cleanParams(pars);
     cleanPerturb(&ptdat);
     cleanPerturbParams(&ptpars);
 

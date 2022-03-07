@@ -83,14 +83,7 @@ int readParams(struct params *pars, const char *fname) {
      return 0;
 }
 
-int readUnits(struct units *us, const char *fname) {
-    /* Internal units */
-    us->UnitLengthMetres = ini_getd("Units", "UnitLengthMetres", 1.0, fname);
-    us->UnitTimeSeconds = ini_getd("Units", "UnitTimeSeconds", 1.0, fname);
-    us->UnitMassKilogram = ini_getd("Units", "UnitMassKilogram", 1.0, fname);
-    us->UnitTemperatureKelvin = ini_getd("Units", "UnitTemperatureKelvin", 1.0, fname);
-    us->UnitCurrentAmpere = ini_getd("Units", "UnitCurrentAmpere", 1.0, fname);
-
+int setPhysicalConstants(struct units *us) {
     /* Some physical constants */
     us->SpeedOfLight = SPEED_OF_LIGHT_METRES_SECONDS * us->UnitTimeSeconds
                         / us->UnitLengthMetres;
@@ -105,6 +98,17 @@ int readUnits(struct units *us, const char *fname) {
     us->ElectronVolt = ELECTRONVOLT_SI_UNITS / us->UnitMassKilogram / us->UnitLengthMetres
                     / us->UnitLengthMetres * us->UnitTimeSeconds
                     * us->UnitTimeSeconds; // J = kg*m^2/s^2
+}
+
+int readUnits(struct units *us, const char *fname) {
+    /* Internal units */
+    us->UnitLengthMetres = ini_getd("Units", "UnitLengthMetres", 1.0, fname);
+    us->UnitTimeSeconds = ini_getd("Units", "UnitTimeSeconds", 1.0, fname);
+    us->UnitMassKilogram = ini_getd("Units", "UnitMassKilogram", 1.0, fname);
+    us->UnitTemperatureKelvin = ini_getd("Units", "UnitTemperatureKelvin", 1.0, fname);
+    us->UnitCurrentAmpere = ini_getd("Units", "UnitCurrentAmpere", 1.0, fname);
+
+    setPhysicalConstants(us);
 
     return 0;
 }
