@@ -35,6 +35,8 @@
 #include "../parser/minIni.h"
 // #include "../include/output.h"
 
+#include <mpi.h>
+
 struct params {
 
     /* Box parameters */
