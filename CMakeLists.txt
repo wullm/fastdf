@@ -61,8 +61,17 @@ target_compile_definitions(fastdf_shared PRIVATE "USE_HDF5")
 # Force compilation with CLASS
 target_compile_definitions(fastdf_static PRIVATE "WITH_CLASS")
 target_compile_definitions(fastdf_shared PRIVATE "WITH_CLASS")
-target_include_directories(fastdf_static PRIVATE "../class-src/include/")
-target_include_directories(fastdf_shared PRIVATE "../class-src/include/")
+
+set(SEARCH_CLASS_PATH ../class-src/)
+set(CLASS_INCLUDES )
+list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/include)
+list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/heating)
+list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/HyRec2020)
+list(APPEND CLASS_INCLUDES ${SEARCH_CLASS_PATH}/external/RecfastCLASS)
+
+target_include_directories(fastdf_static PRIVATE ${CLASS_INCLUDES})
+target_include_directories(fastdf_shared PRIVATE ${CLASS_INCLUDES})
+message(STATUS "SEARCH_CLASS_PATH = ${SEARCH_CLASS_PATH}")
 
 # mpi flags
 if(MPI_C_FOUND)
