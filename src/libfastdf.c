@@ -1029,6 +1029,7 @@ int run_fastdf(struct params *pars, struct units *us) {
     double *energies = malloc(1 * localParticleNumber * sizeof(double));
     double *masses = malloc(1 * localParticleNumber * sizeof(double));
     double *weights = malloc(1 * localParticleNumber * sizeof(double));
+    double *phaseDensities = malloc(1 * localParticleNumber * sizeof(double));
     for (long long i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
@@ -1043,6 +1044,7 @@ int run_fastdf(struct params *pars, struct units *us) {
         energies[i] = eps;
         masses[i] = particle_mass;
         weights[i] = w;
+        phaseDensities[i] = p->f_i;
     }
 
     /* Final operations before writing the particles to disk */
@@ -1131,6 +1133,10 @@ int run_fastdf(struct params *pars, struct units *us) {
         h_data = H5Dcreate(h_grp, "Velocities", H5T_NATIVE_DOUBLE, h_vspace, H5P_DEFAULT, h_prop_vec, H5P_DEFAULT);
         H5Dclose(h_data);
 
+        /* Particle IDs (use scalar space) */
+        h_data = H5Dcreate(h_grp, "ParticleIDs", H5T_NATIVE_LLONG, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
+        H5Dclose(h_data);
+
         /* Masses (use scalar space) */
         h_data = H5Dcreate(h_grp, "Masses", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
@@ -1139,12 +1145,12 @@ int run_fastdf(struct params *pars, struct units *us) {
         h_data = H5Dcreate(h_grp, "Weights", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
         
-        /* Energies (use scalar space) */
-        h_data = H5Dcreate(h_grp, "Energies", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
+        /* Initial unperturbed phase-space densities (use scalar space) */
+        h_data = H5Dcreate(h_grp, "PhaseSpaceDensities", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
 
-        /* Particle IDs (use scalar space) */
-        h_data = H5Dcreate(h_grp, "ParticleIDs", H5T_NATIVE_LLONG, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
+        /* Energies (use scalar space) */
+        h_data = H5Dcreate(h_grp, "Energies", H5T_NATIVE_DOUBLE, h_sspace, H5P_DEFAULT, h_prop_sca, H5P_DEFAULT);
         H5Dclose(h_data);
 
         /* Close the group */
@@ -1230,6 +1236,14 @@ int run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(vels);
 
+    message(rank, "Writing ParticleIDs.\n");
+
+    /* Write particle id data (scalar) */
+    h_data = H5Dopen(h_grp, "ParticleIDs", H5P_DEFAULT);
+    H5Dwrite(h_data, H5T_NATIVE_LLONG, h_ch_sspace, h_sspace, H5P_DEFAULT, ids);
+    H5Dclose(h_data);
+    free(ids);
+
     message(rank, "Writing Masses.\n");
 
     /* Write mass data (scalar) */
@@ -1246,6 +1260,14 @@ int run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(weights);
 
+    message(rank, "Writing PhaseSpaceDensities.\n");
+
+    /* Write initial unperturbed phase-space density data (scalar) */
+    h_data = H5Dopen(h_grp, "PhaseSpaceDensities", H5P_DEFAULT);
+    H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_sspace, h_sspace, H5P_DEFAULT, phaseDensities);
+    H5Dclose(h_data);
+    free(phaseDensities);
+
     message(rank, "Writing Energies.\n");
 
     /* Write energy data (scalar) */
@@ -1253,14 +1275,6 @@ int run_fastdf(struct params *pars, struct units *us) {
     H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_ch_sspace, h_sspace, H5P_DEFAULT, energies);
     H5Dclose(h_data);
     free(energies);
-
-    message(rank, "Writing ParticleIDs.\n");
-
-    /* Write particle id data (scalar) */
-    h_data = H5Dopen(h_grp, "ParticleIDs", H5P_DEFAULT);
-    H5Dwrite(h_data, H5T_NATIVE_LLONG, h_ch_sspace, h_sspace, H5P_DEFAULT, ids);
-    H5Dclose(h_data);
-    free(ids);
 
     message(rank, "Done with writing on rank 0.\n");
 
