@@ -76,6 +76,7 @@ int readParams(struct params *pars, const char *fname) {
     pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
 
     /* Read strings */
+    int len = DEFAULT_STRING_LENGTH;
     ini_gets("Output", "Directory", "./output", pars->OutputDirectory, len, fname);
     ini_gets("Simulation", "Name", "No Name", pars->Name, len, fname);
     ini_gets("Simulation", "Gauge", "Newtonian", pars->Gauge, len, fname);
