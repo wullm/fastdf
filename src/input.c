@@ -43,6 +43,8 @@ int initParams(struct params *pars) {
     pars->Gauge = malloc(len);
     pars->ClassIniFile = malloc(len);
     pars->VelocityType = malloc(len);
+    
+    return 0;
 }
 
 int readParams(struct params *pars, const char *fname) {
