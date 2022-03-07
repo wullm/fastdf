@@ -104,9 +104,9 @@ static inline double fermi_dirac_density(double p_eV, double T_eV) {
  * @param boxlen Comoving physical sidelength of the box
  * @param us Container of units physical constants
  */
-static void init_neutrino_particle(uint64_t seed, double m_eV, double v[3],
-                                   double x[3], double *w, double boxlen,
-                                   const struct units *us, double T_eV) {
+static inline void init_neutrino_particle(uint64_t seed, double m_eV, double v[3],
+                                          double x[3], double *w, double boxlen,
+                                          const struct units *us, double T_eV) {
 
     /* A unique uniform random number for this neutrino */
     const double z = sampleUniform(&seed);
