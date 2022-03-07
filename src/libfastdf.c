@@ -78,7 +78,7 @@ int run_fastdf(struct params *pars, struct units *us) {
     } else {
         /* Run CLASS */
         #ifdef WITH_CLASS
-        run_class(&ptdat, us, &ptpars, pars->ClassIniFile);
+        run_class(&ptdat, us, &ptpars, pars->ClassIniFile, /* verbose = */ pars->rank == 0);
         #else
         printf("\n");
         printf("Error: Not compiled with CLASS.\n");

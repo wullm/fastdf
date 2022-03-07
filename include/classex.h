@@ -28,7 +28,8 @@
 #include "../include/input.h"
 
 int run_class(struct perturb_data *data, struct units *us, 
-              struct perturb_params *ptpars, char *ini_filename);
+              struct perturb_params *ptpars, char *ini_filename,
+              int verbose);
 
 
 #endif

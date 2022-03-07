@@ -107,9 +107,7 @@ int readPerturbData(struct perturb_data *data, struct units *us,
         /* Determine the unit conversion factor */
         char *title = DesiredFunctions[i];
         double unit_factor = unitConversionFactor(title, unit_length_factor, unit_time_factor);
-    
-        printf("Unit conversion factor for '%s' is %f\n", title, unit_factor);
-    
+
         /* For each timestep and wavenumber */
         for (size_t index_tau = 0; index_tau < tau_size; index_tau++) {
             for (size_t index_k = 0; index_k < k_size; index_k++) {
@@ -132,8 +130,6 @@ int readPerturbData(struct perturb_data *data, struct units *us,
         }
         index_func++;
     }
-    
-    printf("\n");
     
     /* Finally, we also want to get the redshifts and background densities.
      * To do this, we need to let CLASS populate a vector of background
@@ -196,14 +192,14 @@ int readPerturbData(struct perturb_data *data, struct units *us,
     /* Done with the CLASS background vector */
     free(pvecback);
     
-    printf("\n");
-    printf("The perturbations are sampled at %zu * %zu points.\n", k_size, tau_size);
+    // printf("The perturbations are sampled at %zu * %zu points.\n", k_size, tau_size);
 
     return 0;
 }
 
 int run_class(struct perturb_data *data, struct units *us, 
-              struct perturb_params *ptpars, char *ini_filename) {
+              struct perturb_params *ptpars, char *ini_filename,
+              int verbose) {
 
     /* Define the CLASS structures */
     struct precision pr;  /* for precision parameters */
@@ -228,7 +224,8 @@ int run_class(struct perturb_data *data, struct units *us,
         return 1;
     }
     
-    printf("Running CLASS on parameter file '%s'.\n\n", ini_filename);
+    if (verbose)
+    printf("Running CLASS on parameter file '%s'.\n", ini_filename);
             
     int class_argc = 2;
     char *class_argv[] = {"", ini_filename, ""};
@@ -249,13 +246,14 @@ int run_class(struct perturb_data *data, struct units *us,
     if (perturbations_init(&pr, &ba, &th, &pt) == _FAILURE_) {
         printf("Error in perturbations_init \n%s\n", pt.error_message);
     }
-
-    printf("\n");
     
     /* Read perturb data */
     readPerturbData(data, us, &pt, &ba);
-    
-    printf("We have read out %d functions.\n", data->n_functions);
+
+    if (verbose) {
+        printf("We have read out %d functions.\n", data->n_functions);
+        printf("The perturbations are sampled at %d * %d points.\n", data->k_size, data->tau_size);
+    }
     
     /* Retrieve the number of ncdm species and their masses in eV */
     ptpars->N_ncdm = ba.N_ncdm;
@@ -284,7 +282,8 @@ int run_class(struct perturb_data *data, struct units *us,
         ptpars->Omega_m -= ba.Omega0_ncdm[i];
     }
     
-    printf("\nShutting CLASS down again.\n");
+    if (verbose)
+    printf("Shutting CLASS down again.\n");
     
     /* Pre-empt segfault in CLASS if there is no interacting dark radiation */
     if (ba.has_idr == _FALSE_) {

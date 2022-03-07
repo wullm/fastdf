@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
     } else {
         /* Run CLASS */
         #ifdef WITH_CLASS
-        run_class(&ptdat, &us, &ptpars, "input_class_parameters.ini");
+        run_class(&ptdat, &us, &ptpars, "input_class_parameters.ini", /* verbose = */ pars.rank == 0);
         #else
         printf("\n");
         printf("Error: Not compiled with CLASS.\n");
