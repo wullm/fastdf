@@ -30,7 +30,7 @@ message(STATUS "HDF5_LIBRARIES = ${HDF5_LIBRARIES}")
 message(STATUS "HDF5_INCLUDE_DIRS = ${HDF5_INCLUDE_DIRS}")
 message(STATUS "HDF5_IS_PARALLEL = ${HDF5_IS_PARALLEL}")
 
-file(GLOB fastdf_SOURCES src/*.c)
+file(GLOB fastdf_SOURCES src/*.c parser/*.c)
 
 # Static library
 add_library(fastdf_static STATIC ${fastdf_SOURCES})
