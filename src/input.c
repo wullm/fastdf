@@ -98,6 +98,8 @@ int setPhysicalConstants(struct units *us) {
     us->ElectronVolt = ELECTRONVOLT_SI_UNITS / us->UnitMassKilogram / us->UnitLengthMetres
                     / us->UnitLengthMetres * us->UnitTimeSeconds
                     * us->UnitTimeSeconds; // J = kg*m^2/s^2
+
+    return 0;
 }
 
 int readUnits(struct units *us, const char *fname) {
