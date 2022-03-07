@@ -104,7 +104,6 @@ int run_fastdf() {
 
     const double h = ptpars.h;
     const double H_0 = h * 100 * KM_METRES / MPC_METRES * us.UnitTimeSeconds;
-    const double Omega_m = ptpars.Omega_m;
     const double rho_crit = 3.0 * H_0 * H_0 / (8. * M_PI * us.GravityG);
 
     /* Package physical constants */
