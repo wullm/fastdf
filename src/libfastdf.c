@@ -1303,4 +1303,6 @@ int run_fastdf() {
     long unsigned microsec = (time_stop.tv_sec - time_start.tv_sec) * 1000000
                            + time_stop.tv_usec - time_start.tv_usec;
     message(rank, "\nTime elapsed: %.5f s\n", microsec/1e6);
+    
+    return 0;
 }
