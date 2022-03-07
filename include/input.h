@@ -101,6 +101,7 @@ struct units {
     double ElectronVolt;
 };
 
+int initParams(struct params *pars);
 int readParams(struct params *parser, const char *fname);
 int readUnits(struct units *us, const char *fname);
 int setPhysicalConstants(struct units *us);

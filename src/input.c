@@ -24,63 +24,73 @@
 #include <math.h>
 #include "../include/input.h"
 
+int initParams(struct params *pars) {
+    /* Initialize the struct to zero */
+    bzero(pars, sizeof(struct params));
+
+    /* Allocate memory for string parameters */
+    int len = DEFAULT_STRING_LENGTH;
+    pars->OutputDirectory = malloc(len);
+    pars->Name = malloc(len);
+    pars->ExportName = malloc(len);
+    pars->InputDirectory = malloc(len);
+    pars->InputFilename = malloc(len);
+    pars->OutputFilename = malloc(len);
+    pars->PerturbFile = malloc(len);
+    pars->GaussianRandomFieldFile = malloc(len);
+    pars->GaussianRandomFieldDataset = malloc(len);
+    pars->TransferFunctionDensity = malloc(len);
+    pars->Gauge = malloc(len);
+    pars->ClassIniFile = malloc(len);
+    pars->VelocityType = malloc(len);
+}
+
 int readParams(struct params *pars, const char *fname) {
-     pars->FirstID = ini_getl("Simulation", "FirstID", 0, fname);
+    initParams(pars);
 
-     /* Desired particle numbers */
-     pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname);
-     pars->NumPartGenerate = pars->CubeRootNumber * pars->CubeRootNumber * pars->CubeRootNumber;
+    /* Desired particle numbers */
+    pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname);
+    pars->NumPartGenerate = pars->CubeRootNumber * pars->CubeRootNumber * pars->CubeRootNumber;
 
-     pars->ScaleFactorBegin = ini_getd("Simulation", "ScaleFactorBegin", 0.005, fname);
-     pars->ScaleFactorEnd = ini_getd("Simulation", "ScaleFactorEnd", 0.01, fname);
-     pars->ScaleFactorStep = ini_getd("Simulation", "ScaleFactorStep", 0.05, fname);
-     pars->RecomputeTrigger = ini_getd("Simulation", "RecomputeTrigger", 0.01, fname);
-     pars->RecomputeScaleRef = ini_getd("Simulation", "RecomputeScaleRef", 0.0, fname);
-     pars->CubeRootNumber = ini_getl("Simulation", "CubeRootNumber", 0, fname);
-     pars->InvertField = ini_getd("Box", "InvertField", 0, fname);
-     pars->BoxLen = ini_getd("Box", "BoxLen", 0., fname);
+    /* Other simulation parameters */
+    pars->FirstID = ini_getl("Simulation", "FirstID", 0, fname);
+    pars->ScaleFactorBegin = ini_getd("Simulation", "ScaleFactorBegin", 0.005, fname);
+    pars->ScaleFactorEnd = ini_getd("Simulation", "ScaleFactorEnd", 0.01, fname);
+    pars->ScaleFactorStep = ini_getd("Simulation", "ScaleFactorStep", 0.05, fname);
+    pars->RecomputeTrigger = ini_getd("Simulation", "RecomputeTrigger", 0.01, fname);
+    pars->RecomputeScaleRef = ini_getd("Simulation", "RecomputeScaleRef", 0.0, fname);
+    pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
 
-     pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
+    /* Parameters for the white noise field box */
+    pars->InvertField = ini_getd("Box", "InvertField", 0, fname);
+    pars->BoxLen = ini_getd("Box", "BoxLen", 0., fname);
 
-     pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
+    /* Parameters of the primordial power spectrum (optional) */
+    pars->NormalizeGaussianField = ini_getl("PrimordialSpectrum", "NormalizeGaussianField", 0, fname);
+    pars->AssumeMonofonicNormalization = ini_getl("PrimordialSpectrum", "AssumeMonofonicNormalization", 0, fname);
+    pars->PrimordialScalarAmplitude = ini_getd("PrimordialSpectrum", "ScalarAmplitude", 2e-9, fname);
+    pars->PrimordialSpectralIndex = ini_getd("PrimordialSpectrum", "SpectralIndex", 0.96, fname);
+    pars->PrimordialPivotScale = ini_getd("PrimordialSpectrum", "PivotScale", 0.05, fname);
 
-     /* Parameters of the primordial power spectrum (optional) */
-     pars->NormalizeGaussianField = ini_getl("PrimordialSpectrum", "NormalizeGaussianField", 0, fname);
-     pars->AssumeMonofonicNormalization = ini_getl("PrimordialSpectrum", "AssumeMonofonicNormalization", 0, fname);
-     pars->PrimordialScalarAmplitude = ini_getd("PrimordialSpectrum", "ScalarAmplitude", 2e-9, fname);
-     pars->PrimordialSpectralIndex = ini_getd("PrimordialSpectrum", "SpectralIndex", 0.96, fname);
-     pars->PrimordialPivotScale = ini_getd("PrimordialSpectrum", "PivotScale", 0.05, fname);
+    /* Output parameters */
+    pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
 
-     /* Read strings */
-     int len = DEFAULT_STRING_LENGTH;
-     pars->OutputDirectory = malloc(len);
-     pars->Name = malloc(len);
-     pars->ExportName = malloc(len);
-     pars->InputDirectory = malloc(len);
-     pars->InputFilename = malloc(len);
-     pars->OutputFilename = malloc(len);
-     pars->PerturbFile = malloc(len);
-     pars->GaussianRandomFieldFile = malloc(len);
-     pars->GaussianRandomFieldDataset = malloc(len);
-     pars->TransferFunctionDensity = malloc(len);
-     pars->Gauge = malloc(len);
-     pars->ClassIniFile = malloc(len);
-     pars->VelocityType = malloc(len);
-     ini_gets("Output", "Directory", "./output", pars->OutputDirectory, len, fname);
-     ini_gets("Simulation", "Name", "No Name", pars->Name, len, fname);
-     ini_gets("Simulation", "Gauge", "Newtonian", pars->Gauge, len, fname);
-     ini_gets("Input", "Directory", "./input", pars->InputDirectory, len, fname);
-     ini_gets("Input", "Filename", "particles.hdf5", pars->InputFilename, len, fname);
-     ini_gets("Output", "Filename", "particles.hdf5", pars->OutputFilename, len, fname);
-     ini_gets("Output", "ExportName", "PartType6", pars->ExportName, len, fname);
-     ini_gets("Output", "VelocityType", "peculiar", pars->VelocityType, len, fname);
-     ini_gets("PerturbData", "File", "", pars->PerturbFile, len, fname);
-     ini_gets("PerturbData", "TransferFunctionDensity", "", pars->TransferFunctionDensity, len, fname);
-     ini_gets("PerturbData", "ClassIniFile", "", pars->ClassIniFile, len, fname);
-     ini_gets("Box", "GaussianRandomFieldFile", "", pars->GaussianRandomFieldFile, len, fname);
-     ini_gets("Box", "GaussianRandomFieldDataset", "Field/Field", pars->GaussianRandomFieldDataset, len, fname);
+    /* Read strings */
+    ini_gets("Output", "Directory", "./output", pars->OutputDirectory, len, fname);
+    ini_gets("Simulation", "Name", "No Name", pars->Name, len, fname);
+    ini_gets("Simulation", "Gauge", "Newtonian", pars->Gauge, len, fname);
+    ini_gets("Input", "Directory", "./input", pars->InputDirectory, len, fname);
+    ini_gets("Input", "Filename", "particles.hdf5", pars->InputFilename, len, fname);
+    ini_gets("Output", "Filename", "particles.hdf5", pars->OutputFilename, len, fname);
+    ini_gets("Output", "ExportName", "PartType6", pars->ExportName, len, fname);
+    ini_gets("Output", "VelocityType", "peculiar", pars->VelocityType, len, fname);
+    ini_gets("PerturbData", "File", "", pars->PerturbFile, len, fname);
+    ini_gets("PerturbData", "TransferFunctionDensity", "", pars->TransferFunctionDensity, len, fname);
+    ini_gets("PerturbData", "ClassIniFile", "", pars->ClassIniFile, len, fname);
+    ini_gets("Box", "GaussianRandomFieldFile", "", pars->GaussianRandomFieldFile, len, fname);
+    ini_gets("Box", "GaussianRandomFieldDataset", "Field/Field", pars->GaussianRandomFieldDataset, len, fname);
 
-     return 0;
+    return 0;
 }
 
 int setPhysicalConstants(struct units *us) {
