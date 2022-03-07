@@ -162,12 +162,7 @@ int readPerturbData(struct perturb_data *data, struct units *us,
     
         /* Retrieve background quantities in CLASS units */
         double H = pvecback[ba->index_bg_H];
-        double H_prime = pvecback[ba->index_bg_H_prime];
-        double D = pvecback[ba->index_bg_D];
-        double f = pvecback[ba->index_bg_f];
-        double D_prime = f * a * H * D;
-        double a_prime = a*a*H;
-    
+
         /* Store the redshift */
         data->redshift[index_tau] = z;
     
