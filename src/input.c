@@ -43,7 +43,22 @@ int initParams(struct params *pars) {
     pars->Gauge = malloc(len);
     pars->ClassIniFile = malloc(len);
     pars->VelocityType = malloc(len);
-    
+
+    /* Initialize empty strings */
+    strcpy(pars->OutputDirectory, "");
+    strcpy(pars->Name, "");
+    strcpy(pars->ExportName, "");
+    strcpy(pars->InputDirectory, "");
+    strcpy(pars->InputFilename, "");
+    strcpy(pars->OutputFilename, "");
+    strcpy(pars->PerturbFile, "");
+    strcpy(pars->GaussianRandomFieldFile, "");
+    strcpy(pars->GaussianRandomFieldDataset, "");
+    strcpy(pars->TransferFunctionDensity, "");
+    strcpy(pars->Gauge, "");
+    strcpy(pars->ClassIniFile, "");
+    strcpy(pars->VelocityType, "");
+
     return 0;
 }
 
