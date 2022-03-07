@@ -318,6 +318,7 @@ int readFieldFileDataSet(double **box, int *N, double *box_len,
 
 int readFieldFile_MPI(double **box, int *N, double *box_len, MPI_Comm comm,
                       const char *fname) {
+#ifdef H5_HAVE_PARALLEL
 
     /* Property list for MPI file access */
     hid_t prop_faxs = H5Pcreate(H5P_FILE_ACCESS);
@@ -410,6 +411,10 @@ int readFieldFile_MPI(double **box, int *N, double *box_len, MPI_Comm comm,
     H5Fclose(h_file);
 
     return 0;
+#else
+    printf("Error: not compiled with parallel HDF5.\n");
+    return 1;
+#endif
 }
 
 

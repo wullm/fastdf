@@ -1172,8 +1172,12 @@ int main(int argc, char *argv[]) {
 
     message(rank, "Writing output to %s.\n", out_fname);
 
-    /* Now open the file in parallel mode */
+    /* Now open the file in parallel mode if possible */
+#ifdef H5_HAVE_PARALLEL
     hid_t h_out_file = openFile_MPI(MPI_COMM_WORLD, out_fname);
+#else
+    hid_t h_out_file = openFile(out_fname);
+#endif
 
     /* The particle group in the output file */
     hid_t h_grp = H5Gopen(h_out_file, pars.ExportName, H5P_DEFAULT);
