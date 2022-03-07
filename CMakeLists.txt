@@ -58,6 +58,9 @@ target_link_libraries(fastdf_shared PRIVATE ${HDF5_LIBRARIES})
 target_include_directories(fastdf_shared PRIVATE ${HDF5_INCLUDE_DIRS})
 target_compile_definitions(fastdf_shared PRIVATE "USE_HDF5")
 
+# Force compilation with CLASS
+target_compile_definitions(fastdf_static PRIVATE "WITH_CLASS")
+target_compile_definitions(fastdf_shared PRIVATE "WITH_CLASS")
 
 # mpi flags
 if(MPI_C_FOUND)
