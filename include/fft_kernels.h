@@ -80,21 +80,6 @@ static inline void kernel_inv_poisson(struct kernel *the_kernel) {
     the_kernel->kern = (k > 0) ? -1.0/k/k : 1.0;
 }
 
-static inline void kernel_dx(struct kernel *the_kernel) {
-    double kx = the_kernel->kx;
-    the_kernel->kern = C_I*kx;
-}
-
-static inline void kernel_dy(struct kernel *the_kernel) {
-    double ky = the_kernel->ky;
-    the_kernel->kern = C_I*ky;
-}
-
-static inline void kernel_dz(struct kernel *the_kernel) {
-    double kz = the_kernel->kz;
-    the_kernel->kern = C_I*kz;
-}
-
 struct spline_params {
     const struct perturb_spline *spline;
     int index_src; //index of the source function
