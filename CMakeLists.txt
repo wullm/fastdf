@@ -59,6 +59,7 @@ target_include_directories(fastdf_static PRIVATE ${HDF5_INCLUDE_DIRS})
 target_compile_definitions(fastdf_static PRIVATE "USE_HDF5")
 target_include_directories(fastdf_static PRIVATE ${CLASS_INCLUDES})
 target_compile_definitions(fastdf_static PRIVATE "WITH_CLASS")
+target_compile_definitions(fastdf_static PRIVATE _SVID_SOURCE PORTABLE_STRNICMP)
 
 # mpi flags
 if(MPI_C_FOUND)
