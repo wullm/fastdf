@@ -28,13 +28,19 @@
 #include <fftw3-mpi.h>
 #include <math.h>
 
+#ifdef __cplusplus
+typedef std::complex<double> MyComplex;
+#else
+typedef double _Complex MyComplex;
+#endif
+
 /* A structure for calculating kernel functions */
 struct kernel {
     /* Wavevector in internal inverse length units */
     double kx,ky,kz;
     double k;
     /* Value of the kernel at this k */
-    double _Complex kern;
+    MyComplex kern;
     /* Optional extra parameters */
     const void *params;
 };
