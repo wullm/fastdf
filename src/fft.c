@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../include/defines.h"
 #include "../include/fft.h"
 
 /* Compute the 3D wavevector (kx,ky,kz) and its length k */

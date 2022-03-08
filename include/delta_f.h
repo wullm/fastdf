@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 /* Lookup table for Fermi-Dirac transform */
+#include "defines.h"
 #include "fermi_dirac.h"
 #include "input.h"
 
@@ -21,9 +22,6 @@ struct internal_units {
     const double mass_unit_kg;
     const double temperature_unit_kelvin;
 };
-
-/* Riemann function zeta(3) */
-#define M_ZETA_3 1.2020569031595942853997
 
 static inline double hypot3(double x, double y, double z) {
     return hypot(x, hypot(y, z));
