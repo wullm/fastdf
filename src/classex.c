@@ -35,10 +35,18 @@ int readPerturbData(struct perturb_data *data, struct units *us,
     size_t tau_size = pt->tau_size;
 
     /* The vectors to be transfered from the CLASS structs to the data struct */
+
+#ifdef delta_shift_Nb_defined // do we have additional N-body transfer functions?
+    const int NumDesiredFunctions = 7;
+    int ClassPerturbIndices[7] = {pt->index_tp_phi, pt->index_tp_psi, pt->index_tp_delta_ncdm1, pt->index_tp_h_prime, pt->index_tp_eta_prime, pt->index_tp_H_T_Nb_prime, pt->index_tp_delta_shift_Nb_m};
+    int ClassBackgroundIndices[7] = {-1, -1, ba->index_bg_rho_ncdm1, -1, -1, -1, -1};
+    char DesiredFunctions[7][50] = {"phi", "psi", "d_ncdm[0]", "h_prime", "eta_prime", "H_T_Nb_prime", "delta_shift_Nb_m"};
+#else
     const int NumDesiredFunctions = 3;
     int ClassPerturbIndices[3] = {pt->index_tp_phi, pt->index_tp_psi, pt->index_tp_delta_ncdm1};
     int ClassBackgroundIndices[3] = {-1, -1, ba->index_bg_rho_ncdm1};
     char DesiredFunctions[3][50] = {"phi", "psi", "d_ncdm[0]"};
+#endif
 
     /* The number of transfer functions to be read */
     const size_t n_functions = NumDesiredFunctions;
