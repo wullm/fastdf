@@ -26,7 +26,7 @@
 
 int initParams(struct params *pars) {
     /* Initialize the struct to zero */
-    bzero(pars, sizeof(struct params));
+    memset(pars, 0, sizeof(struct params));
 
     /* Allocate memory for string parameters */
     int len = DEFAULT_STRING_LENGTH;
