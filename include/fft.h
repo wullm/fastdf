@@ -31,8 +31,10 @@
 #ifdef __cplusplus
 using namespace std::complex_literals;
 typedef std::complex<double> MyComplex;
+#define C_I 1.0i
 #else
 typedef double _Complex MyComplex;
+#define C_I I
 #endif
 
 /* A structure for calculating kernel functions */
