@@ -22,6 +22,7 @@
 #include <math.h>
 #include <gsl/gsl_integration.h>
 #include "../include/cosmology.h"
+#include "../include/defines.h"
 
 int cosmo_table_length = 100;
 
