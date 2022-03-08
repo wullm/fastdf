@@ -29,6 +29,7 @@
 #include <math.h>
 
 #ifdef __cplusplus
+using namespace std::complex_literals;
 typedef std::complex<double> MyComplex;
 #else
 typedef double _Complex MyComplex;
