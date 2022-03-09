@@ -82,6 +82,7 @@ struct params {
     char *VelocityType;
     char OutputFields;
     char IncludeHubbleFactors;
+    char DistributedFiles;
 
     /* MPI rank (generated automatically) */
     int rank;

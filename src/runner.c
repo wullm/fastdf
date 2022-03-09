@@ -1092,19 +1092,27 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     header(rank, "Prepare output");
 
-    if (rank == 0) {
+    /* The file name for the current rank */
+    char out_fname_local[220];
+    if (pars->DistributedFiles) {
+        sprintf(out_fname_local, "%s.%d", out_fname, pars->rank);
+    } else {
+        sprintf(out_fname_local, "%s", out_fname);
+    }
+
+    if (rank == 0 || pars->DistributedFiles) {
         /* Create the output file if it does not exist */
         hid_t h_out_file;
-        if (!fileExists(out_fname)) {
+        if (!fileExists(out_fname_local)) {
             /* Create the file */
-            h_out_file = createFile(out_fname);
+            h_out_file = createFile(out_fname_local);
 
             /* Writing attributes into the Header & Cosmology groups */
             int err = writeHeaderAttributes(pars, us, pars->NumPartGenerate, h_out_file);
             if (err > 0) exit(1);
         } else {
             /* Otherwise, open the file in read & write mode */
-            h_out_file = H5Fopen(out_fname, H5F_ACC_RDWR , H5P_DEFAULT);
+            h_out_file = H5Fopen(out_fname_local, H5F_ACC_RDWR , H5P_DEFAULT);
         }
 
         /* The ExportName */
@@ -1116,14 +1124,17 @@ long long run_fastdf(struct params *pars, struct units *us) {
         /* Datsets */
         hid_t h_data;
 
+        /* The number of particles in the file */
+        long long parts_in_file = pars->DistributedFiles ? localParticleNumber : pars->NumPartGenerate;
+
         /* Vector dataspace (e.g. positions, velocities) */
         const hsize_t vrank = 2;
-        const hsize_t vdims[2] = {pars->NumPartGenerate, 3};
+        const hsize_t vdims[2] = {parts_in_file, 3};
         hid_t h_vspace = H5Screate_simple(vrank, vdims, NULL);
 
         /* Scalar dataspace (e.g. masses, particle ids) */
         const hsize_t srank = 1;
-        const hsize_t sdims[1] = {pars->NumPartGenerate};
+        const hsize_t sdims[1] = {parts_in_file};
         hid_t h_sspace = H5Screate_simple(srank, sdims, NULL);
 
         /* Set chunking for vectors */
@@ -1183,9 +1194,9 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     /* Now open the file in parallel mode if possible */
 #ifdef H5_HAVE_PARALLEL
-    hid_t h_out_file = openFile_MPI(MPI_COMM_WORLD, out_fname);
+    hid_t h_out_file = openFile_MPI(MPI_COMM_WORLD, out_fname_local);
 #else
-    hid_t h_out_file = openFile(out_fname);
+    hid_t h_out_file = openFile(out_fname_local);
 #endif
 
     /* The particle group in the output file */
@@ -1213,7 +1224,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     hid_t h_ch_sspace = H5Screate_simple(srank, ch_sdims, NULL);
 
     /* The start of this chunk, in the overall vector & scalar spaces */
-    const hsize_t start_in_group = localFirstNumber;
+    const hsize_t start_in_group = pars->DistributedFiles ? 0 : localFirstNumber;
     const hsize_t vstart[2] = {start_in_group, 0}; //always with the "x" coordinate
     const hsize_t sstart[1] = {start_in_group};
 
