@@ -56,7 +56,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     /* The file name for the current rank */
     char out_fname_local[220];
-    if (pars->DistributedFiles) {
+    if (pars->DistributedFiles && MPI_Rank_Count > 1) {
         sprintf(out_fname_local, "%s.%d", out_fname, pars->rank);
     } else {
         sprintf(out_fname_local, "%s", out_fname);
