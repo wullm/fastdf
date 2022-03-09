@@ -43,8 +43,6 @@ int main(int argc, char *argv[]) {
 
     /* Read options */
     const char *fname = argv[1];
-    header(rank, "FastDF Neutrino Initial Condition Generator");
-    message(rank, "The parameter file is %s\n", fname);
 
     /* Timer */
     struct timeval time_stop, time_start;
