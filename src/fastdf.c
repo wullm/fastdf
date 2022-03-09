@@ -52,9 +52,6 @@ int main(int argc, char *argv[]) {
 
     struct params pars;
     struct units us;
-    struct perturb_data ptdat;
-    struct perturb_spline spline;
-    struct perturb_params ptpars;
 
     /* Store the MPI rank */
     pars.rank = rank;
