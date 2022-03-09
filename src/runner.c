@@ -27,7 +27,8 @@
 
 #include "../include/fastdf.h"
 
-int run_fastdf(struct params *pars, struct units *us) {
+// Returns the number of local particles generated
+long long run_fastdf(struct params *pars, struct units *us) {
     
     /* Initialize MPI for distributed memory parallelization */
     // MPI_Init(&argc, &argv);
@@ -1317,5 +1318,5 @@ int run_fastdf(struct params *pars, struct units *us) {
     /* Release the interpolation splines */
     cleanPerturbSpline(&spline);
     
-    return 0;
+    return localParticleNumber;
 }

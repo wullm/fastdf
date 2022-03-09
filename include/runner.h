@@ -20,6 +20,6 @@
 #ifndef RUNNER_H
 #define RUNNER_H
 
-int run_fastdf(struct params *pars, struct units *us);
+long long run_fastdf(struct params *pars, struct units *us);
 
 #endif
