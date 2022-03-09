@@ -42,10 +42,6 @@ int run_fastdf(struct params *pars, struct units *us) {
     // const char *fname = "/home/willem/fastdf5/fastdf/default.ini";
     header(rank, "FastDF Neutrino Initial Condition Generator");
 
-    /* Timer */
-    struct timeval time_stop, time_start;
-    gettimeofday(&time_start, NULL);
-
     struct perturb_data ptdat;
     struct perturb_spline spline;
     struct perturb_params ptpars;
@@ -1302,12 +1298,6 @@ int run_fastdf(struct params *pars, struct units *us) {
 
     /* Release the interpolation splines */
     cleanPerturbSpline(&spline);
-
-    /* Timer */
-    gettimeofday(&time_stop, NULL);
-    long unsigned microsec = (time_stop.tv_sec - time_start.tv_sec) * 1000000
-                           + time_stop.tv_usec - time_start.tv_usec;
-    message(rank, "\nTime elapsed: %.5f s\n", microsec/1e6);
     
     return 0;
 }

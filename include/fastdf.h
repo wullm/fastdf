@@ -35,6 +35,7 @@
 #include "fft_kernels.h"
 #include "relativity.h"
 #include "mesh_grav.h"
+#include "runner.h"
 
 /* Did we compile with CLASS? */
 #ifdef WITH_CLASS
