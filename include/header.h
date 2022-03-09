@@ -25,7 +25,6 @@
 #include "input.h"
 #include "cosmology.h"
 
-int writeHeaderAttributes(struct params *pars, struct cosmology *cosmo,
-                          struct units *us, long long int Npart,
-                          hid_t h_file);
+int writeHeaderAttributes(struct params *pars,  struct units *us,
+                          long long int Npart, hid_t h_file);
 #endif

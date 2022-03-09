@@ -1,6 +1,6 @@
 /*******************************************************************************
- * This file is part of Mitos.
- * Copyright (c) 2020 Willem Elbers (whe@willemelbers.com)
+ * This file is part of FastDF.
+ * Copyright (c) 2022 Willem Elbers (whe@willemelbers.com)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,29 +17,15 @@
  *
  ******************************************************************************/
 
-#ifndef FASTDF_H
-#define FASTDF_H
+#ifndef DEFINES_H
+#define DEFINES_H
 
-#include "defines.h"
-#include "input.h"
-#include "output.h"
-#include "message.h"
-#include "delta_f.h"
-#include "header.h"
-#include "perturb_data.h"
-#include "perturb_spline.h"
-#include "particle.h"
-#include "titles.h"
-#include "cosmology.h"
-#include "fft.h"
-#include "fft_kernels.h"
-#include "relativity.h"
-#include "mesh_grav.h"
-#include "runner.h"
+/* Riemann function zeta(3) */
+#define M_ZETA_3 1.2020569031595942853997
 
-/* Did we compile with CLASS? */
-#ifdef WITH_CLASS
-#include "classex.h"
+/* PI */
+#ifndef M_PI
+#define M_PI 3.1415926535897932384626433832795
 #endif
 
 #endif

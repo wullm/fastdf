@@ -1,0 +1,21 @@
+# your optimization flag
+#OPTFLAG = -O3
+OPTFLAG = -Ofast -ffast-math #-march=native
+#OPTFLAG = -fast
+
+# your openmp flag (comment for compiling without openmp)
+OMPFLAG   = -fopenmp
+#OMPFLAG   = -mp -mp=nonuma -mp=allcores -g
+#OMPFLAG   = -openmp
+
+# all other compilation flags
+CCFLAG = -g -fPIC
+LDFLAG = -g -fPIC
+
+all: libclass.so
+
+libclass.so:
+	$(CC) $(OPTFLAG) $(OMPFLAG) $(LDFLAG) -shared -o libclass.so $(CLASS_OBJS)/*.o $(CLASS_INCS) -lm
+
+clean:
+	-rm -f *.so

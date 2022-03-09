@@ -17,8 +17,12 @@
  *
  ******************************************************************************/
 
-#ifndef FASTDF_H
-#define FASTDF_H
+#ifndef FASTDF_CPP_H
+#define FASTDF_CPP_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "defines.h"
 #include "input.h"
@@ -40,6 +44,10 @@
 /* Did we compile with CLASS? */
 #ifdef WITH_CLASS
 #include "classex.h"
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

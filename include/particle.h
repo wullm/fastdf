@@ -20,11 +20,6 @@
 #ifndef PARTICLE_H
 #define PARTICLE_H
 
-struct particle {
-    double x[3];
-    double mass;
-};
-
 /* Extended particle with velocity data and more */
 struct particle_ext {
     double x[3];

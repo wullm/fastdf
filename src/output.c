@@ -20,6 +20,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <mpi.h>
+#include <hdf5.h>
 #include "../include/output.h"
 #include "../include/fft.h"
 
@@ -32,6 +34,7 @@ hid_t openFile(const char *fname) {
 }
 
 hid_t openFile_MPI(MPI_Comm comm, const char *fname) {
+#ifdef H5_HAVE_PARALLEL
     /* Property list for MPI file access */
     hid_t prop_faxs = H5Pcreate(H5P_FILE_ACCESS);
     H5Pset_fapl_mpio(prop_faxs, comm, MPI_INFO_NULL);
@@ -41,6 +44,10 @@ hid_t openFile_MPI(MPI_Comm comm, const char *fname) {
     H5Pclose(prop_faxs);
 
     return h_file;
+#else
+    printf("Error: not compiled with parallel HDF5.\n");
+    return -1;
+#endif
 }
 
 hid_t createFile(const char *fname) {

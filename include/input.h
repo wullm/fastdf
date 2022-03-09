@@ -35,6 +35,8 @@
 #include "../parser/minIni.h"
 // #include "../include/output.h"
 
+#include <mpi.h>
+
 struct params {
 
     /* Box parameters */
@@ -46,6 +48,9 @@ struct params {
     char *GaussianRandomFieldFile;
     char *GaussianRandomFieldDataset;
     char InvertField;
+
+    /* CLASS parameter file names */
+    char *ClassIniFile;
 
     /* Parameters of the primordial power spectrum (optional) */
     char NormalizeGaussianField;
@@ -96,8 +101,10 @@ struct units {
     double ElectronVolt;
 };
 
+int initParams(struct params *pars);
 int readParams(struct params *parser, const char *fname);
 int readUnits(struct units *us, const char *fname);
+int setPhysicalConstants(struct units *us);
 
 int cleanParams(struct params *parser);
 
@@ -107,6 +114,8 @@ int readFieldFileDataSet(double **box, int *N, double *box_len,
 
 int readFieldFile_MPI(double **box, int *N, double *box_len, MPI_Comm comm,
                       const char *fname);
+int fileExists(const char *fname);
+int groupExists(const char *fname, const char *group_name);
 
 static inline void generateFieldFilename(const struct params *pars, char *fname,
                                          const char *Identifier, const char *title,

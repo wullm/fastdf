@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 /* Lookup table for Fermi-Dirac transform */
+#include "defines.h"
 #include "fermi_dirac.h"
 #include "input.h"
 
@@ -21,19 +22,6 @@ struct internal_units {
     const double mass_unit_kg;
     const double temperature_unit_kelvin;
 };
-
-/* Physical constants in internal units */
-struct phys_const {
-    const double speed_of_light;
-    const double boltzmann_constant;
-    const double reduced_planck_constant;
-    const double electronvolt;
-    const double neutrino_temperature;
-    const double neutrino_temperature_eV;
-};
-
-/* Riemann function zeta(3) */
-#define M_ZETA_3 1.2020569031595942853997
 
 static inline double hypot3(double x, double y, double z) {
     return hypot(x, hypot(y, z));
@@ -114,9 +102,9 @@ static inline double fermi_dirac_density(double p_eV, double T_eV) {
  * @param boxlen Comoving physical sidelength of the box
  * @param us Container of units physical constants
  */
-static void init_neutrino_particle(uint64_t seed, double m_eV, double v[3],
-                                   double x[3], double *w, double boxlen,
-                                   const struct units *us, double T_eV) {
+static inline void init_neutrino_particle(uint64_t seed, double m_eV, double v[3],
+                                          double x[3], double *w, double boxlen,
+                                          const struct units *us, double T_eV) {
 
     /* A unique uniform random number for this neutrino */
     const double z = sampleUniform(&seed);

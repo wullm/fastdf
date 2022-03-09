@@ -60,17 +60,6 @@ static inline void kernel_elliptic_tophat(struct kernel *the_kernel) {
     the_kernel->kern = (theta <= 4*M_PI*M_PI) ? 1.0 : 0.0;
 }
 
-static inline void kernel_translate(struct kernel *the_kernel) {
-    double kx = the_kernel->kx;
-    double ky = the_kernel->ky;
-    double kz = the_kernel->kz;
-    double *param = (double *) the_kernel->params;
-    double rx = param[0];
-    double ry = param[1];
-    double rz = param[2];
-    the_kernel->kern = cexp(I*(rx*kx + ry*ky + rz*kz));
-}
-
 static inline void kernel_gaussian(struct kernel *the_kernel) {
     double k = the_kernel->k;
     double R = *((double*) the_kernel->params);
@@ -89,21 +78,6 @@ static inline void kernel_gaussian_inv(struct kernel *the_kernel) {
 static inline void kernel_inv_poisson(struct kernel *the_kernel) {
     double k = the_kernel->k;
     the_kernel->kern = (k > 0) ? -1.0/k/k : 1.0;
-}
-
-static inline void kernel_dx(struct kernel *the_kernel) {
-    double kx = the_kernel->kx;
-    the_kernel->kern = I*kx;
-}
-
-static inline void kernel_dy(struct kernel *the_kernel) {
-    double ky = the_kernel->ky;
-    the_kernel->kern = I*ky;
-}
-
-static inline void kernel_dz(struct kernel *the_kernel) {
-    double kz = the_kernel->kz;
-    the_kernel->kern = I*kz;
 }
 
 struct spline_params {
