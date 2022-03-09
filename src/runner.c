@@ -50,20 +50,30 @@ long long run_fastdf(struct params *pars, struct units *us) {
     /* Store the MPI rank */
     pars->rank = rank;
 
-    /* Check if the output file exists */
+    /* The base output file name */
     char out_fname[200];
-    sprintf(out_fname, "%s/%s", pars->OutputDirectory, pars->OutputFilename);
-    int file_exists = fileExists(out_fname);
+    sprintf(out_fname, "%s", pars->OutputFilename);
+
+    /* The file name for the current rank */
+    char out_fname_local[220];
+    if (pars->DistributedFiles) {
+        sprintf(out_fname_local, "%s.%d", out_fname, pars->rank);
+    } else {
+        sprintf(out_fname_local, "%s", out_fname);
+    }
+
+    /* Check if this file already exists */
+    int file_exists = fileExists(out_fname_local);
 
     /* The ExportName for the neutrino particles */
     const char *ExportName = pars->ExportName;
-    int group_exists = groupExists(out_fname, ExportName);
+    int group_exists = groupExists(out_fname_local, ExportName);
 
     if (file_exists && group_exists) {
-        printf("Error: file already exists and has a neutrino particle group.\n");
+        printf("Error: file '%s' already exists and has a neutrino particle group.\n", out_fname_local);
         exit(1);
     } else if (file_exists && !group_exists) {
-        message(rank, "Appending neutrino particles to '%s'.\n", out_fname);
+        message(rank, "Appending neutrino particles to '%s'.\n", out_fname_local);
     }
 
     /* Check if the user specified a perturbation data file or if CLASS
@@ -1092,15 +1102,10 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     header(rank, "Prepare output");
 
-    /* The file name for the current rank */
-    char out_fname_local[220];
-    if (pars->DistributedFiles) {
-        sprintf(out_fname_local, "%s.%d", out_fname, pars->rank);
-    } else {
-        sprintf(out_fname_local, "%s", out_fname);
-    }
-
     if (rank == 0 || pars->DistributedFiles) {
+        /* The number of particles in the file */
+        long long parts_in_file = pars->DistributedFiles ? localParticleNumber : pars->NumPartGenerate;
+
         /* Create the output file if it does not exist */
         hid_t h_out_file;
         if (!fileExists(out_fname_local)) {
@@ -1108,7 +1113,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
             h_out_file = createFile(out_fname_local);
 
             /* Writing attributes into the Header & Cosmology groups */
-            int err = writeHeaderAttributes(pars, us, pars->NumPartGenerate, h_out_file);
+            int err = writeHeaderAttributes(pars, us, parts_in_file, pars->NumPartGenerate, h_out_file);
             if (err > 0) exit(1);
         } else {
             /* Otherwise, open the file in read & write mode */
@@ -1123,9 +1128,6 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
         /* Datsets */
         hid_t h_data;
-
-        /* The number of particles in the file */
-        long long parts_in_file = pars->DistributedFiles ? localParticleNumber : pars->NumPartGenerate;
 
         /* Vector dataspace (e.g. positions, velocities) */
         const hsize_t vrank = 2;
@@ -1148,7 +1150,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
         H5Pset_chunk(h_prop_sca, srank, schunk);
 
         /* Create the particle group in the output file */
-        printf("Creating Group '%s' with %lld particles.\n", ExportName, pars->NumPartGenerate);
+        message(rank, "Creating Group '%s' with %lld particles.\n", ExportName, pars->NumPartGenerate);
         h_grp = H5Gcreate(h_out_file, ExportName, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
         /* Coordinates (use vector space) */
@@ -1194,7 +1196,12 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     /* Now open the file in parallel mode if possible */
 #ifdef H5_HAVE_PARALLEL
-    hid_t h_out_file = openFile_MPI(MPI_COMM_WORLD, out_fname_local);
+    hid_t h_out_file;
+    if (pars->DistributedFiles) {
+        h_out_file = openFile(out_fname_local);
+    } else {
+        h_out_file = openFile_MPI(MPI_COMM_WORLD, out_fname_local);
+    }
 #else
     hid_t h_out_file = openFile(out_fname_local);
 #endif
@@ -1319,7 +1326,6 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     /* Done with MPI parallelization */
     MPI_Barrier(MPI_COMM_WORLD);
-    // MPI_Finalize();
 
     /* Clean up */
     cleanParams(pars);

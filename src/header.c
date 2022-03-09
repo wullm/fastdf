@@ -23,10 +23,15 @@
 #include "../include/header.h"
 
 int writeHeaderAttributes(struct params *pars, struct units *us,
-                          long long int Npart, hid_t h_file) {
+                          long long int Npart_local, long long int Npart_total,
+                          hid_t h_file) {
 
     /* Create the Header group */
     hid_t h_grp = H5Gcreate(h_file, "/Header", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Retrieve the number of ranks */
+    int MPI_Rank_Count;
+    MPI_Comm_size(MPI_COMM_WORLD, &MPI_Rank_Count);
 
     /* Create dataspace for BoxSize attribute */
     const hsize_t arank = 1;
@@ -63,7 +68,7 @@ int writeHeaderAttributes(struct params *pars, struct units *us,
     H5Aclose(h_attr);
 
     /* Create the NumFilesPerSnapshot attribute and write the data */
-    int num_files_per_snapshot = 1;
+    int num_files_per_snapshot = pars->DistributedFiles ? MPI_Rank_Count : 1;
     h_attr = H5Acreate1(h_grp, "NumFilesPerSnapshot", H5T_NATIVE_INT, h_aspace, H5P_DEFAULT);
     H5Awrite(h_attr, H5T_NATIVE_INT, &num_files_per_snapshot);
     H5Aclose(h_attr);
@@ -73,13 +78,19 @@ int writeHeaderAttributes(struct params *pars, struct units *us,
     H5Sset_extent_simple(h_aspace, arank, adims_pt, NULL);
 
     /* Collect particle type attributes using the ExportNames */
-    long long int numparts[7] = {0, 0, 0, 0, 0, 0, Npart};
-    long long int numparts_high_word[7] = {0, 0, 0, 0, 0, 0, 0}; //not used, so use zeros
-    double mass_table[7] = {0., 0., 0., 0., 0., 0., 0.}; //not used, so use zeros
+    long long int numparts_local[7] = {0, 0, 0, 0, 0, 0, Npart_local};
+    long long int numparts_total[7] = {0, 0, 0, 0, 0, 0, Npart_total};
+    long long int numparts_high_word[7] = {0, 0, 0, 0, 0, 0, Npart_total >> 32};
+    double mass_table[7] = {0., 0., 0., 0., 0., 0., 0.};
+
+    /* Create the NumPart_ThisFile attribute and write the data */
+    h_attr = H5Acreate1(h_grp, "NumPart_ThisFile", H5T_NATIVE_LONG, h_aspace, H5P_DEFAULT);
+    H5Awrite(h_attr, H5T_NATIVE_LONG, numparts_local);
+    H5Aclose(h_attr);
 
     /* Create the NumPart_Total attribute and write the data */
     h_attr = H5Acreate1(h_grp, "NumPart_Total", H5T_NATIVE_LONG, h_aspace, H5P_DEFAULT);
-    H5Awrite(h_attr, H5T_NATIVE_LONG, numparts);
+    H5Awrite(h_attr, H5T_NATIVE_LONG, numparts_total);
     H5Aclose(h_attr);
 
     /* Create the NumPart_Total_HighWord attribute and write the data */

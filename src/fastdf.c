@@ -63,6 +63,9 @@ int main(int argc, char *argv[]) {
     /* Run the set-up, main loop, and output */
     run_fastdf(&pars, &us);
 
+    /* Done with MPI parallelization */
+    MPI_Finalize();
+
     /* Timer */
     gettimeofday(&time_stop, NULL);
     long unsigned microsec = (time_stop.tv_sec - time_start.tv_sec) * 1000000
