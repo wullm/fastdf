@@ -81,6 +81,7 @@ struct params {
     char *ExportName;
     char *VelocityType;
     char OutputFields;
+    char IncludeHubbleFactors;
 
     /* MPI rank (generated automatically) */
     int rank;

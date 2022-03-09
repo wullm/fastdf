@@ -91,6 +91,7 @@ int readParams(struct params *pars, const char *fname) {
 
     /* Output parameters */
     pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
+    pars->IncludeHubbleFactors = ini_getl("Output", "IncludeHubbleFactors", 0, fname);
 
     /* Read strings */
     int len = DEFAULT_STRING_LENGTH;

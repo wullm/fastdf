@@ -138,6 +138,11 @@ int run_fastdf(struct params *pars, struct units *us) {
         exit(1);
     }
 
+    if (pars->IncludeHubbleFactors) {
+        printf("Output coordinates in U_L h^-1.\n");
+        printf("Output masses in U_M h^-1.\n");
+    }
+
     message(rank, "a_begin = %.3e (z = %.2f)\n", a_begin, 1./a_begin - 1);
     message(rank, "a_end = %.3e (z = %.2f)\n", a_end, 1./a_end - 1);
 
@@ -1041,6 +1046,12 @@ int run_fastdf(struct params *pars, struct units *us) {
         masses[i] = particle_mass;
         weights[i] = w;
         phaseDensities[i] = p->f_i;
+
+        /* Include Hubble factors for Gadget ICs? */
+        if (pars->IncludeHubbleFactors) {
+            energies[i] *= h;
+            masses[i] *= h;
+        }
     }
 
     /* Final operations before writing the particles to disk */
@@ -1068,6 +1079,13 @@ int run_fastdf(struct params *pars, struct units *us) {
             p->v[0] /= sqrt(a_end);
             p->v[1] /= sqrt(a_end);
             p->v[2] /= sqrt(a_end);
+        }
+
+        /* Include Hubble factors for Gadget ICs? */
+        if (pars->IncludeHubbleFactors) {
+            p->x[0] *= h;
+            p->x[1] *= h;
+            p->x[2] *= h;
         }
     }
 
