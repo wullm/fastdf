@@ -304,6 +304,7 @@ int main(int argc, char *argv[]) {
     /* Allocate boxes for the initial conditions */
     double *box_dic = malloc(N*N*N*sizeof(double));
     double *box_tic = malloc(N*N*N*sizeof(double));
+    double *box_phi = malloc(N*N*N*sizeof(double));
 
 
     header(rank, "Generating pre-initial conditions");
@@ -317,8 +318,12 @@ int main(int argc, char *argv[]) {
 
         /* The indices of the potential transfer function */
         int index_psi = findTitle(ptdat.titles, "psi", ptdat.n_functions);
+        int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
         if (index_psi < 0) {
             printf("Error: transfer function '%s' not found (%d).\n", "psi", index_psi);
+            return 1;
+        } else if (index_phi < 0) {
+            printf("Error: transfer function '%s' not found (%d).\n", "phi", index_phi);
             return 1;
         }
 
@@ -354,6 +359,30 @@ int main(int argc, char *argv[]) {
             writeFieldFile(box_tic, N, BoxLen, tnu_fname);
         }
 
+        if (use_alternative_eom) {
+            /* Package the perturbation theory interpolation spline parameters */
+            struct spline_params sp2 = {&spline, index_phi, tau_index, u_tau};
+
+            /* Apply the transfer function for phi (read only fgrf, output into fbox) */
+            fft_apply_kernel(fbox, fgrf, N, BoxLen, kernel_transfer_function, &sp2);
+
+            /* Fourier transform to real space */
+            fftw_plan c2r2 = fftw_plan_dft_c2r_3d(N, N, N, fbox, box_phi, FFTW_ESTIMATE);
+            fft_execute(c2r2);
+            fft_normalize_c2r(box_phi, N, BoxLen);
+            fftw_destroy_plan(c2r2);
+
+            /* Multiply by the appropriate factor */
+            for (int i=0; i<N*N*N; i++) {
+                box_phi[i] *= inv_c2;
+            }
+
+            if (rank == 0 && pars.OutputFields) {
+                char phi_fname[50];
+                sprintf(phi_fname, "%s/ic_phi.hdf5", pars.OutputDirectory);
+                writeFieldFile(box_phi, N, BoxLen, phi_fname);
+            }
+        }
     }
 
     message(rank, "ID of first particle = %lld\n", firstID);
@@ -398,6 +427,16 @@ int main(int argc, char *argv[]) {
         p->v[0] += vel[0] * inv_c * eps_eV * cosmo.a_begin;
         p->v[1] += vel[1] * inv_c * eps_eV * cosmo.a_begin;
         p->v[2] += vel[2] * inv_c * eps_eV * cosmo.a_begin;
+
+        if (use_alternative_eom) {
+            /* Determine the phi perturbation at this point */
+            double phi = gridCIC(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+
+            /* Apply the phi perturbation */
+            p->v[0] *= 1.0 - phi;
+            p->v[1] *= 1.0 - phi;
+            p->v[2] *= 1.0 - phi;
+        }
 
         /* Compute initial phase space density */
         p->f_i = f_i;
@@ -455,7 +494,6 @@ int main(int argc, char *argv[]) {
     double *box_psi1 = malloc(N*N*N*sizeof(double));
 
     /* The interpolated grids at time t */
-    double *box_phi = malloc(N*N*N*sizeof(double));
     double *box_psi = malloc(N*N*N*sizeof(double));
 
     /* Time derivative at time t */
@@ -813,6 +851,73 @@ int main(int argc, char *argv[]) {
     free(box_psi0);
     free(box_psi1);
     free(box_phi_dot);
+
+    if (use_alternative_eom) {
+        /* Allocate boxes for transformation */
+        double *box_phi_shift = malloc(N*N*N*sizeof(double));
+        fftw_complex *fbox_phi_shift = malloc(N*N*N*sizeof(fftw_complex));
+
+        header(rank, "Generating phi shift grid");
+
+        /* Final time at which to execute the gauge transformation */
+        double z_end = 1./cosmo.a_end - 1;
+        double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
+
+        /* Find the interpolation index along the time dimension */
+        int tau_index; //greatest lower bound bin index
+        double u_tau; //spacing between subsequent bins
+        perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
+
+        /* The indices of the potential transfer function */
+        int index_phi = findTitle(ptdat.titles, "phi", ptdat.n_functions);
+        if (index_phi < 0) {
+            printf("Error: transfer function '%s' not found (%d).\n", "phi", index_phi);
+            return 1;
+        }
+
+        /* Package the perturbation theory interpolation spline parameters */
+        struct spline_params sp = {&spline, index_phi, tau_index, u_tau};
+
+        /* Apply the transfer function (read only fgrf, output into fbox_phi_shift) */
+        fft_apply_kernel(fbox_phi_shift, fgrf, N, BoxLen, kernel_transfer_function, &sp);
+
+        /* Fourier transform to real space */
+        fftw_plan c2rp = fftw_plan_dft_c2r_3d(N, N, N, fbox_phi_shift, box_phi_shift, FFTW_ESTIMATE);
+        fft_execute(c2rp);
+        fft_normalize_c2r(box_phi_shift, N, BoxLen);
+        fftw_destroy_plan(c2rp);
+
+        /* Multiply by the appropriate factor */
+        for (int i=0; i<N*N*N; i++) {
+            box_phi_shift[i] *= inv_c2;
+        }
+
+        if (rank == 0 && pars.OutputFields) {
+            char phi_fname[50];
+            sprintf(phi_fname, "%s/shift_phi.hdf5", pars.OutputDirectory);
+            writeFieldFile(box_phi_shift, N, BoxLen, phi_fname);
+        }
+
+        message(rank, "Applying phi shift to the particles.\n");
+
+        /* Perform the gauge transformation */
+        #pragma omp parallel for
+        for (long long i=0; i<localParticleNumber; i++) {
+            struct particle_ext *p = &genparts[i];
+
+            /* Determine the phi shift at this point */
+            double phi = gridCIC(box_phi_shift, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+
+            /* Apply the density shift */
+            p->v[0] *= 1 + phi;
+            p->v[1] *= 1 + phi;
+            p->v[2] *= 1 + phi;
+        }
+
+        /* Free the phi shift transformation boxes */
+        free(box_phi_shift);
+        free(fbox_phi_shift);
+    }
 
     if (gauge_Nbody) {
 
