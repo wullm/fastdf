@@ -268,6 +268,9 @@ long long run_fastdf(struct params *pars, struct units *us) {
         p->x[0] = BoxLen * 0.5;
         p->x[1] = BoxLen * 0.5;
         p->x[2] = BoxLen * 0.5;
+        
+        /* Compute initial phase space density */
+        p->f_i = f_i;
 
         /* Compute the magnitude of the initial velocity */
         p->v_i[0] = p->v[0];
