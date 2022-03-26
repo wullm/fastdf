@@ -690,20 +690,20 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
             /* Get the acceleration from the scalar potential psi */
             double acc_psi[3];
-            accelCIC(box_psi, N, BoxLen, p->x, acc_psi);
+            accelNGP(box_psi, N, BoxLen, p->x, acc_psi);
 
             /* Get the acceleration from the scalar potential phi */
             double acc_phi[3];
-            accelCIC(box_phi, N, BoxLen, p->x, acc_phi);
+            accelNGP(box_phi, N, BoxLen, p->x, acc_phi);
 
             /* Also fetch the value of the potential at the particle position */
-            double psi = gridCIC(box_psi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi = gridCIC(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double psi = gridNGP(box_psi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi = gridNGP(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
             double psi_c2 = psi * inv_c2;
             double phi_c2 = phi * inv_c2;
 
             /* Also fetch the time derivative of phi at the particle position */
-            double phi_dot = gridCIC(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot = gridNGP(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
             double phi_dot_c2 = phi_dot * inv_c2;
 
             /* Inner product of v_i with acc_phi */
@@ -767,14 +767,14 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
             /* Get the acceleration from the scalar potential psi */
             double acc_psi[3];
-            accelCIC(box_psi, N, BoxLen, p->x, acc_psi);
+            accelNGP(box_psi, N, BoxLen, p->x, acc_psi);
 
             /* Get the acceleration from the scalar potential phi */
             double acc_phi[3];
-            accelCIC(box_phi, N, BoxLen, p->x, acc_phi);
+            accelNGP(box_phi, N, BoxLen, p->x, acc_phi);
 
             /* Also fetch the time derivative of phi at the particle position */
-            double phi_dot = gridCIC(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot = gridNGP(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
             double phi_dot_c2 = phi_dot * inv_c2;
 
             /* Inner product of v_i with acc_phi */

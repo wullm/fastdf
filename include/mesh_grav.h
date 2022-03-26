@@ -20,7 +20,10 @@
 #ifndef MESH_GRAVITY_H
 #define MESH_GRAVITY_H
 
+double gridNGP(const double *box, int N, double boxlen, double x, double y,
+               double z);
 double gridCIC(const double *box, int N, double boxlen, double x, double y,
                double z);
 void accelCIC(const double *box, int N, double boxlen, double *x, double *a);
+void accelNGP(const double *box, int N, double boxlen, double *x, double *a);
 #endif
