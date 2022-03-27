@@ -191,9 +191,9 @@ void accelInterp(const double *box, int N, double boxlen, double *x, double *a,
                  int order) {
 
     if (order == 1) {
-        return accelNGP(box, N, boxlen, x, a);
+        accelNGP(box, N, boxlen, x, a);
     } else if (order == 2) {
-        return accelCIC(box, N, boxlen, x, a);
+        accelCIC(box, N, boxlen, x, a);
     } else {
         printf("Error: unsupported interpolation order.\n");
         exit(1);
