@@ -58,6 +58,8 @@ struct params {
     double PrimordialScalarAmplitude;
     double PrimordialSpectralIndex;
     double PrimordialPivotScale;
+    double PrimordialRunning;
+    double PrimordialRunningSecond;
 
     /* Simulation parameters */
     char *Name;

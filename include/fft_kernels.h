@@ -177,9 +177,11 @@ static inline void kernel_undo_Hermite_window(struct kernel *the_kernel) {
 }
 
 struct power_spectrum {
-    double A_s;
-    double n_s;
-    double k_pivot;
+    double A_s; //amplitude
+    double n_s; //spectral index
+    double k_pivot; //pivot scale
+    double alpha_s; //running
+    double beta_s; //running of running
 };
 
 static inline void kernel_power_no_transfer(struct kernel *the_kernel) {
@@ -194,6 +196,16 @@ static inline void kernel_power_no_transfer(struct kernel *the_kernel) {
         double n_s = ps->n_s;
         double k_pivot = ps->k_pivot;
         double Pk = A_s * pow(k/k_pivot, n_s - 1.) * k * (2. * M_PI * M_PI);
+
+        /* Running of the spectral index */
+        double alpha_s = ps->alpha_s;
+        double beta_s = ps->beta_s;
+        if (alpha_s != 0.0 || beta_s != 0.0) {
+            double lnk = log(k / k_pivot);
+            double running = 0.5 * (alpha_s * lnk + beta_s * lnk * lnk / 3.0);
+            Pk *= pow(k/k_pivot, running);
+        }
+
         the_kernel->kern = sqrt(Pk);
     }
 }

@@ -31,7 +31,6 @@
 long long run_fastdf(struct params *pars, struct units *us) {
     
     /* Initialize MPI for distributed memory parallelization */
-    // MPI_Init(&argc, &argv);
     fftw_mpi_init();
 
     /* Get the dimensions of the cluster */
@@ -40,7 +39,6 @@ long long run_fastdf(struct params *pars, struct units *us) {
     MPI_Comm_size(MPI_COMM_WORLD, &MPI_Rank_Count);
 
     /* Read options */
-    // const char *fname = "/home/willem/fastdf5/fastdf/default.ini";
     header(rank, "FastDF Neutrino Initial Condition Generator");
 
     struct perturb_data ptdat;
@@ -83,16 +81,16 @@ long long run_fastdf(struct params *pars, struct units *us) {
         readPerturb(pars, us, &ptdat);
         readPerturbParams(pars, us, &ptpars);
     } else {
+#ifdef WITH_CLASS
         /* Run CLASS */
-        #ifdef WITH_CLASS
         run_class(&ptdat, us, &ptpars, pars->ClassIniFile, /* verbose = */ pars->rank == 0);
-        #else
+#else
         printf("\n");
         printf("Error: Not compiled with CLASS.\n");
         printf("You could reconfigure with \"./configure --with-class=/your/class\" and then \n");
         printf("\"make clean && make\". Alternatively, you could provide a perturbation vector file.\n");
         return 1;
-        #endif
+#endif
     }
 
     /* Integration limits */
@@ -253,11 +251,15 @@ long long run_fastdf(struct params *pars, struct units *us) {
         ps.A_s = pars->PrimordialScalarAmplitude;
         ps.n_s = pars->PrimordialSpectralIndex;
         ps.k_pivot = pars->PrimordialPivotScale;
+        ps.alpha_s = pars->PrimordialRunning;
+        ps.beta_s = pars->PrimordialRunningSecond;
 
         message(rank, "\nApplying primodial power spectrum with\n");
         message(rank, "A_s = %.5e\n", ps.A_s);
         message(rank, "n_s = %.5g\n", ps.n_s);
         message(rank, "k_pivot = %.5g\n", ps.k_pivot);
+        message(rank, "alpha_s = %.5g\n", ps.alpha_s);
+        message(rank, "beta_s = %.5g\n", ps.beta_s);
 
         /* Apply the bare power spectrum to fbox */
         fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_power_no_transfer, &ps);

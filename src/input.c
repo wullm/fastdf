@@ -85,9 +85,11 @@ int readParams(struct params *pars, const char *fname) {
     /* Parameters of the primordial power spectrum (optional) */
     pars->NormalizeGaussianField = ini_getl("PrimordialSpectrum", "NormalizeGaussianField", 0, fname);
     pars->AssumeMonofonicNormalization = ini_getl("PrimordialSpectrum", "AssumeMonofonicNormalization", 0, fname);
-    pars->PrimordialScalarAmplitude = ini_getd("PrimordialSpectrum", "ScalarAmplitude", 2e-9, fname);
-    pars->PrimordialSpectralIndex = ini_getd("PrimordialSpectrum", "SpectralIndex", 0.96, fname);
-    pars->PrimordialPivotScale = ini_getd("PrimordialSpectrum", "PivotScale", 0.05, fname);
+    pars->PrimordialScalarAmplitude = ini_getd("PrimordialSpectrum", "ScalarAmplitude", 2e-9, fname); // A_s - amplitude
+    pars->PrimordialSpectralIndex = ini_getd("PrimordialSpectrum", "SpectralIndex", 0.96, fname); // n_s - spectral index
+    pars->PrimordialPivotScale = ini_getd("PrimordialSpectrum", "PivotScale", 0.05, fname); // k_pivot - pivot scale
+    pars->PrimordialRunning = ini_getd("PrimordialSpectrum", "Running", 0.0, fname); // alpha_s - running of the spectral index
+    pars->PrimordialRunningSecond = ini_getd("PrimordialSpectrum", "RunningSecond", 0.0, fname); // beta_s - running of running
 
     /* Output parameters */
     pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
