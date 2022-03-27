@@ -38,8 +38,13 @@ long long run_fastdf(struct params *pars, struct units *us) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &MPI_Rank_Count);
 
+    /* The level of verbosity */
+    const int verbosity = pars->Verbosity;
+    const int verbosity_low = rank + (verbosity == 0); // low priority
+    const int verbosity_high = rank; // high priority
+
     /* Read options */
-    header(rank, "FastDF Neutrino Initial Condition Generator");
+    header(verbosity_high, "FastDF Neutrino Initial Condition Generator");
 
     struct perturb_data ptdat;
     struct perturb_spline spline;
@@ -71,7 +76,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
         printf("Error: file '%s' already exists and has a neutrino particle group.\n", out_fname_local);
         exit(1);
     } else if (file_exists && !group_exists) {
-        message(rank, "Appending neutrino particles to '%s'.\n", out_fname_local);
+        message(verbosity_low, "Appending neutrino particles to '%s'.\n", out_fname_local);
     }
 
     /* Check if the user specified a perturbation data file or if CLASS
@@ -115,18 +120,18 @@ long long run_fastdf(struct params *pars, struct units *us) {
     /* Initialize the interpolation spline for the perturbation data */
     initPerturbSpline(&spline, DEFAULT_K_ACC_TABLE_SIZE, &ptdat);
 
-    header(rank, "Simulation parameters");
-    message(rank, "We want %lld (%d^3) particles\n", pars->NumPartGenerate, pars->CubeRootNumber);
+    header(verbosity_low, "Simulation parameters");
+    message(verbosity_low, "We want %lld (%d^3) particles\n", pars->NumPartGenerate, pars->CubeRootNumber);
 
     /* Check if we recognize the output gauge */
     int gauge_Nbody = 0;
     if (strcmp(pars->Gauge, "Newtonian") == 0 ||
         strcmp(pars->Gauge, "newtonian") == 0) {
-        message(rank, "Output gauge: Newtonian\n");
+        message(verbosity_low, "Output gauge: Newtonian\n");
     } else if (strcmp(pars->Gauge, "N-body") == 0 ||
                strcmp(pars->Gauge, "n-body") == 0 ||
                strcmp(pars->Gauge, "nbody") == 0) {
-        message(rank, "Output gauge: N-body\n");
+        message(verbosity_low, "Output gauge: N-body\n");
         gauge_Nbody = 1;
     } else {
         printf("Error: unknown output gauge '%s'.\n", pars->Gauge);
@@ -137,10 +142,10 @@ long long run_fastdf(struct params *pars, struct units *us) {
     int velocity_type = 0;
     if (strcmp(pars->VelocityType, "peculiar") == 0 ||
         strcmp(pars->VelocityType, "Peculiar") == 0) {
-        message(rank, "Output velocities: peculiar (a*dx/dt)\n");
+        message(verbosity_low, "Output velocities: peculiar (a*dx/dt)\n");
     } else if (strcmp(pars->VelocityType, "Gadget") == 0 ||
                strcmp(pars->VelocityType, "gadget") == 0) {
-        message(rank, "Output velocities: Gadget (a^.5*dx/dt)\n");
+        message(verbosity_low, "Output velocities: Gadget (a^.5*dx/dt)\n");
         velocity_type = 1;
     } else {
         printf("Error: unknown output velocity type '%s'.\n", pars->VelocityType);
@@ -152,14 +157,14 @@ long long run_fastdf(struct params *pars, struct units *us) {
         printf("Output masses in U_M h^-1.\n");
     }
 
-    message(rank, "a_begin = %.3e (z = %.2f)\n", a_begin, 1./a_begin - 1);
-    message(rank, "a_end = %.3e (z = %.2f)\n", a_end, 1./a_end - 1);
+    message(verbosity_low, "a_begin = %.3e (z = %.2f)\n", a_begin, 1./a_begin - 1);
+    message(verbosity_low, "a_end = %.3e (z = %.2f)\n", a_end, 1./a_end - 1);
 
     const char use_alternative_eom = pars->AlternativeEquations;
     if (use_alternative_eom) {
-        message(rank, "\n\n");
-        message(rank, "WARNING: Using alternative equations of motion!");
-        message(rank, "\n\n");
+        message(verbosity_low, "\n\n");
+        message(verbosity_low, "WARNING: Using alternative equations of motion!");
+        message(verbosity_low, "\n\n");
     }
 
     /* Read the Gaussian random field on each MPI rank */
@@ -167,8 +172,8 @@ long long run_fastdf(struct params *pars, struct units *us) {
     double BoxLen = 0;
     int N;
 
-    header(rank, "Random phases");
-    message(rank, "Reading Gaussian random field from %s (dataset %s).\n", pars->GaussianRandomFieldFile, pars->GaussianRandomFieldDataset);
+    header(verbosity_low, "Random phases");
+    message(verbosity_low, "Reading Gaussian random field from %s (dataset %s).\n", pars->GaussianRandomFieldFile, pars->GaussianRandomFieldDataset);
 
     readFieldFileDataSet(&box, &N, &BoxLen, pars->GaussianRandomFieldFile, pars->GaussianRandomFieldDataset);
     // readFieldFile(&box, &N, &BoxLen, pars->GaussianRandomFieldFile);
@@ -182,15 +187,15 @@ long long run_fastdf(struct params *pars, struct units *us) {
         BoxLen = pars->BoxLen;
     }
 
-    message(rank, "BoxLen = %.2f U_L\n", BoxLen);
-    message(rank, "GridSize = %d\n", N);
+    message(verbosity_low, "BoxLen = %.2f U_L\n", BoxLen);
+    message(verbosity_low, "GridSize = %d\n", N);
 
     /* The order of grid interpolation to be used in the main loop */
     const int grid_interp_order = pars->InterpolationOrder;
     if (grid_interp_order == 1) {
-        message(rank, "Interpolation = %s\n", "NGP");
+        message(verbosity_low, "Interpolation = %s\n", "NGP");
     } else if (grid_interp_order == 2) {
-        message(rank, "Interpolation = %s\n", "CIC");
+        message(verbosity_low, "Interpolation = %s\n", "CIC");
     } else {
         printf("Unsupported grid interpolation order (use 1 = NGP or 2 = CIC).\n");
         exit(1);
@@ -198,7 +203,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     /* Do we want to invert the field for paired simulations? */
     if (pars->InvertField) {
-        message(rank, "Inverting input field.\n");
+        message(verbosity_low, "Inverting input field.\n");
         for (int i = 0; i < N * N * N; i++) {
             box[i] *= -1.0;
         }
@@ -218,17 +223,17 @@ long long run_fastdf(struct params *pars, struct units *us) {
     }
     var /= (double) (N * N * N);
 
-    message(rank, "Mean = %.10g\n", mean);
-    message(rank, "Variance = %.10g\n", var);
+    message(verbosity_low, "Mean = %.10g\n", mean);
+    message(verbosity_low, "Variance = %.10g\n", var);
 
     /* Do we want to normalize the Gaussian field? */
     if (pars->NormalizeGaussianField) {
-        message(rank, "\nNormalizing the input field.\n");
+        message(verbosity_low, "\nNormalizing the input field.\n");
 
         /* Set the variance to 1.0, then apply the correct normalization */
         const double inv_sdev = 1.0 / sqrt(var);
         const double norm = inv_sdev * pow(N / BoxLen, 1.5);
-        message(rank, "Normalizing by %g.\n", norm);
+        message(verbosity_low, "Normalizing by %g.\n", norm);
 
         for (int i = 0; i < N * N * N; i++) {
             box[i] *= norm;
@@ -237,11 +242,11 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     /* Do we want to correct the Monofonic normalization? */
     if (pars->AssumeMonofonicNormalization) {
-        message(rank, "\nUndoing the monofonIC normalization.\n");
+        message(verbosity_low, "\nUndoing the monofonIC normalization.\n");
 
         /* Apply the correct normalization, relative to monofonIC */
         const double norm = pow(h / (2.0 * M_PI), 1.5);
-        message(rank, "Normalizing by %g.\n", norm);
+        message(verbosity_low, "Normalizing by %g.\n", norm);
 
         for (int i = 0; i < N * N * N; i++) {
             box[i] *= norm;
@@ -265,12 +270,12 @@ long long run_fastdf(struct params *pars, struct units *us) {
         ps.alpha_s = pars->PrimordialRunning;
         ps.beta_s = pars->PrimordialRunningSecond;
 
-        message(rank, "\nApplying primodial power spectrum with\n");
-        message(rank, "A_s = %.5e\n", ps.A_s);
-        message(rank, "n_s = %.5g\n", ps.n_s);
-        message(rank, "k_pivot = %.5g\n", ps.k_pivot);
-        message(rank, "alpha_s = %.5g\n", ps.alpha_s);
-        message(rank, "beta_s = %.5g\n", ps.beta_s);
+        message(verbosity_low, "\nApplying primodial power spectrum with\n");
+        message(verbosity_low, "A_s = %.5e\n", ps.A_s);
+        message(verbosity_low, "n_s = %.5g\n", ps.n_s);
+        message(verbosity_low, "k_pivot = %.5g\n", ps.k_pivot);
+        message(verbosity_low, "alpha_s = %.5g\n", ps.alpha_s);
+        message(verbosity_low, "beta_s = %.5g\n", ps.beta_s);
 
         /* Apply the bare power spectrum to fbox */
         fft_apply_kernel(fbox, fbox, N, BoxLen, kernel_power_no_transfer, &ps);
@@ -312,15 +317,15 @@ long long run_fastdf(struct params *pars, struct units *us) {
     const double rho = Omega * rho_crit;
     const double particle_mass = rho * box_vol / pars->NumPartGenerate;
 
-    header(rank, "Mass factors");
-    message(rank, "Neutrino mass is %f eV\n", m_eV);
-    message(rank, "Particle mass is %f U_M\n", particle_mass);
+    header(verbosity_high, "Mass factors");
+    message(verbosity_high, "Neutrino mass is %f eV\n", m_eV);
+    message(verbosity_low, "Particle mass is %f U_M\n", particle_mass);
 
     /* Store the Box Length */
     pars->BoxLen = BoxLen;
 
     /* Determine the number of particle to be generated on each rank */
-    header(rank, "Particle distribution");
+    header(verbosity_low, "Particle distribution");
 
     /* The particle number is M^3 */
     long long M = pars->CubeRootNumber;
@@ -338,6 +343,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     MPI_Allreduce(&localParticleNumber, &totalParticlesAssigned, 1,
                    MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
     assert(totalParticlesAssigned == M * M * M);
+    if (verbosity)
     printf("%03d: Local particles [%04lld, %04lld], first = %lld, last = %lld, total = %lld\n", rank, X_min, X_max, localFirstNumber, localFirstNumber + localParticleNumber - 1, totalParticlesAssigned);
 
     /* Check that we are not exceeding the HDF5 parallel write limit */
@@ -363,8 +369,8 @@ long long run_fastdf(struct params *pars, struct units *us) {
     double *box_tic = malloc(N*N*N*sizeof(double));
 
 
-    header(rank, "Generating pre-initial conditions");
-    message(rank, "Generating pre-initial grids.\n");
+    header(verbosity_low, "Generating pre-initial conditions");
+    message(verbosity_low, "Generating pre-initial grids.\n");
     {
 
         /* Find the interpolation index along the time dimension */
@@ -413,8 +419,8 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
     }
 
-    message(rank, "ID of first particle = %lld\n", firstID);
-    message(rank, "T_nu = %e eV\n", T_eV);
+    message(verbosity_low, "ID of first particle = %lld\n", firstID);
+    message(verbosity_low, "T_nu = %e eV\n", T_eV);
 
     /* Generate random neutrino particles */
     for (long long i=0; i<localParticleNumber; i++) {
@@ -431,7 +437,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
         const double f_i = fermi_dirac_density(p_eV, T_eV);
 
         if (i==0)
-        message(rank, "First random momentum = %e eV\n", p_eV);
+        message(verbosity_low, "First random momentum = %e eV\n", p_eV);
 
         /* Determine the density perturbation at this point */
         double dnu = gridCIC(box_dic, N, BoxLen, p->x[0], p->x[1], p->x[2]);
@@ -470,16 +476,16 @@ long long run_fastdf(struct params *pars, struct units *us) {
     free(box_dic);
     free(box_tic);
 
-    message(rank, "Done with pre-initial conditions.\n");
+    message(verbosity_low, "Done with pre-initial conditions.\n");
 
-    header(rank, "Initiating geodesic integration.");
+    header(verbosity_high, "Initiating neutrino geodesic integration.");
 
     /* Prepare integration */
     int MAX_ITER = (log(a_end) - log(a_begin))/log(a_factor) + 1;
 
-    message(rank, "Step size %.4f\n", a_factor-1);
-    message(rank, "Doing %d iterations\n", MAX_ITER);
-    message(rank, "\n");
+    message(verbosity_high, "Step size %.4f\n", a_factor-1);
+    message(verbosity_high, "Doing %d iterations\n", MAX_ITER);
+    message(verbosity_high, "\n");
 
     /* We will re-compute the potentials when they have changed a certain amount */
     const double recompute_trigger = pars->RecomputeTrigger;
@@ -491,14 +497,14 @@ long long run_fastdf(struct params *pars, struct units *us) {
         k_ref = pars->RecomputeScaleRef;
     }
 
-    message(rank, "Recompute trigger: %f\n", recompute_trigger);
-    message(rank, "Recompute k_ref: %f 1/U_L\n", k_ref);
-    message(rank, "\n");
+    message(verbosity_low, "Recompute trigger: %f\n", recompute_trigger);
+    message(verbosity_low, "Recompute k_ref: %f 1/U_L\n", k_ref);
+    message(verbosity_low, "\n");
 
     /* Start at the beginning */
     double a = a_begin;
 
-    message(rank, "     ITER a         z         I            recompute\n");
+    message(verbosity_high, "     ITER a         z         I            recompute\n");
 
     /* Allocate grids for the potentials (phi and psi) at two different times
      * t0 <= t < t1. We will evaluate at time t using linear interpolation. */
@@ -854,7 +860,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
             int percent = (100.0 * (ITER + 1))/MAX_ITER;
 
-            message(rank, "%3d%% %-4d %.3e %.3e %e %d\n", percent, ITER, a, 1./a-1, I_df, recompute);
+            message(verbosity_high, "%3d%% %-4d %.3e %.3e %e %d\n", percent, ITER, a, 1./a-1, I_df, recompute);
         }
     }
 
@@ -875,13 +881,13 @@ long long run_fastdf(struct params *pars, struct units *us) {
         double *box_dshift = malloc(N*N*N*sizeof(double));
         double *box_tshift = malloc(N*N*N*sizeof(double));
 
-        header(rank, "Generating N-body gauge transformation grid");
+        header(verbosity_low, "Generating N-body gauge transformation grid");
 
         /* Compute the isentropic ratio and equation of state at a_end */
         const double isen_ncdm = ncdm_isentropic_ratio(a_end, m_eV, T_eV);
         const double w_ncdm = ncdm_equation_of_state(a_end, m_eV, T_eV);
-        message(rank, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, a_end);
-        message(rank, "Equation of state = %f at a_end = %e\n", w_ncdm, a_end);
+        message(verbosity_low, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, a_end);
+        message(verbosity_low, "Equation of state = %f at a_end = %e\n", w_ncdm, a_end);
 
         {
             /* Final time at which to execute the gauge transformation */
@@ -1010,7 +1016,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
             free(fbox_HTNbp);
         }
 
-        message(rank, "Applying N-body gauge transformation to the particles.\n");
+        message(verbosity_low, "Applying N-body gauge transformation to the particles.\n");
 
         /* Perform the gauge transformation */
         #pragma omp parallel for
@@ -1115,7 +1121,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
         }
     }
 
-    header(rank, "Prepare output");
+    header(verbosity_high, "Prepare neutrino output");
 
     if (rank == 0 || pars->DistributedFiles) {
         /* The number of particles in the file */
@@ -1165,7 +1171,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
         H5Pset_chunk(h_prop_sca, srank, schunk);
 
         /* Create the particle group in the output file */
-        message(rank, "Creating Group '%s' with %lld particles.\n", ExportName, pars->NumPartGenerate);
+        message(verbosity_low, "Creating Group '%s' with %lld particles.\n", ExportName, pars->NumPartGenerate);
         h_grp = H5Gcreate(h_out_file, ExportName, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
         /* Coordinates (use vector space) */
@@ -1207,7 +1213,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     double a_min;
     MPI_Allreduce(&a, &a_min, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 
-    message(rank, "Writing output to %s.\n", out_fname);
+    message(verbosity_high, "Writing output to %s.\n", out_fname);
 
     /* Now open the file in parallel mode if possible */
 #ifdef H5_HAVE_PARALLEL
@@ -1268,7 +1274,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
         ids[i] = firstID + i;
     }
 
-    message(rank, "Writing Coordinates.\n");
+    message(verbosity_high, "Writing Coordinates.\n");
 
     /* Write coordinate data (vector) */
     h_data = H5Dopen(h_grp, "Coordinates", H5P_DEFAULT);
@@ -1276,7 +1282,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(coords);
 
-    message(rank, "Writing Velocities.\n");
+    message(verbosity_high, "Writing Velocities.\n");
 
     /* Write velocity data (vector) */
     h_data = H5Dopen(h_grp, "Velocities", H5P_DEFAULT);
@@ -1284,7 +1290,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(vels);
 
-    message(rank, "Writing ParticleIDs.\n");
+    message(verbosity_high, "Writing ParticleIDs.\n");
 
     /* Write particle id data (scalar) */
     h_data = H5Dopen(h_grp, "ParticleIDs", H5P_DEFAULT);
@@ -1292,7 +1298,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(ids);
 
-    message(rank, "Writing Masses.\n");
+    message(verbosity_high, "Writing Masses.\n");
 
     /* Write mass data (scalar) */
     h_data = H5Dopen(h_grp, "Masses", H5P_DEFAULT);
@@ -1300,7 +1306,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(masses);
 
-    message(rank, "Writing Weights.\n");
+    message(verbosity_high, "Writing Weights.\n");
 
     /* Write delta-f weight data (scalar) */
     h_data = H5Dopen(h_grp, "Weights", H5P_DEFAULT);
@@ -1308,7 +1314,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(weights);
 
-    message(rank, "Writing PhaseSpaceDensities.\n");
+    message(verbosity_high, "Writing PhaseSpaceDensities.\n");
 
     /* Write initial unperturbed phase-space density data (scalar) */
     h_data = H5Dopen(h_grp, "PhaseSpaceDensities", H5P_DEFAULT);
@@ -1316,7 +1322,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(phaseDensities);
 
-    message(rank, "Writing Energies.\n");
+    message(verbosity_high, "Writing Energies.\n");
 
     /* Write energy data (scalar) */
     h_data = H5Dopen(h_grp, "Energies", H5P_DEFAULT);
@@ -1324,7 +1330,8 @@ long long run_fastdf(struct params *pars, struct units *us) {
     H5Dclose(h_data);
     free(energies);
 
-    message(rank, "Done with writing on rank 0.\n");
+    message(verbosity_high, "\n");
+    message(verbosity_high, "Done with writing on rank 0.\n");
 
     /* Close the chunk-sized scalar and vector dataspaces */
     H5Sclose(h_ch_vspace);

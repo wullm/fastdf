@@ -86,6 +86,7 @@ struct params {
     char OutputFields;
     char IncludeHubbleFactors;
     char DistributedFiles;
+    char Verbosity;
 
     /* MPI rank (generated automatically) */
     int rank;
