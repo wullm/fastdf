@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.11)
 project(fastdf VERSION 1.0.0 DESCRIPTION "Code for neutrino particle initial conditions")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Optimization flags
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -march=native -Wall")
+
 # The root directory of the CLASS installation.
 # The default path should work when CLASS and FastDF are both loaded as
 # submodules for monofonIC. If FastDF is used as a stand-alone code, use
