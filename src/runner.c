@@ -487,7 +487,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
     /* Start at the beginning */
     double a = a_begin;
 
-    message(rank, "ITER]\t a\t z\t I\t recompute\n");
+    message(rank, "     ITER a         z         I            recompute\n");
 
     /* Allocate grids for the potentials (phi and psi) at two different times
      * t0 <= t < t1. We will evaluate at time t using linear interpolation. */
@@ -841,7 +841,9 @@ long long run_fastdf(struct params *pars, struct units *us) {
             /* Compute summary statistic */
             I_df *= 0.5 / pars->NumPartGenerate * weight_compute_invfreq;
 
-            message(rank, "%04d] %.2e %.2e %e %d\n", ITER, a, 1./a-1, I_df, recompute);
+            int percent = (100.0 * (ITER + 1))/MAX_ITER;
+
+            message(rank, "%3d%% %-4d %.3e %.3e %e %d\n", percent, ITER, a, 1./a-1, I_df, recompute);
         }
     }
 
