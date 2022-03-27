@@ -185,6 +185,17 @@ long long run_fastdf(struct params *pars, struct units *us) {
     message(rank, "BoxLen = %.2f U_L\n", BoxLen);
     message(rank, "GridSize = %d\n", N);
 
+    /* The order of grid interpolation to be used in the main loop */
+    const int grid_interp_order = pars->InterpolationOrder;
+    if (grid_interp_order == 1) {
+        message(rank, "Interpolation = %s\n", "NGP");
+    } else if (grid_interp_order == 2) {
+        message(rank, "Interpolation = %s\n", "CIC");
+    } else {
+        printf("Unsupported grid interpolation order (use 1 = NGP or 2 = CIC).\n");
+        exit(1);
+    }
+
     /* Do we want to invert the field for paired simulations? */
     if (pars->InvertField) {
         message(rank, "Inverting input field.\n");
@@ -692,20 +703,20 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
             /* Get the acceleration from the scalar potential psi */
             double acc_psi[3];
-            accelCIC(box_psi, N, BoxLen, p->x, acc_psi);
+            accelInterp(box_psi, N, BoxLen, p->x, acc_psi, grid_interp_order);
 
             /* Get the acceleration from the scalar potential phi */
             double acc_phi[3];
-            accelCIC(box_phi, N, BoxLen, p->x, acc_phi);
+            accelInterp(box_phi, N, BoxLen, p->x, acc_phi, grid_interp_order);
 
             /* Also fetch the value of the potential at the particle position */
-            double psi = gridCIC(box_psi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-            double phi = gridCIC(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double psi = gridInterp(box_psi, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
+            double phi = gridInterp(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
             double psi_c2 = psi * inv_c2;
             double phi_c2 = phi * inv_c2;
 
             /* Also fetch the time derivative of phi at the particle position */
-            double phi_dot = gridCIC(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot = gridInterp(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
             double phi_dot_c2 = phi_dot * inv_c2;
 
             /* Inner product of v_i with acc_phi */
@@ -769,14 +780,14 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
             /* Get the acceleration from the scalar potential psi */
             double acc_psi[3];
-            accelCIC(box_psi, N, BoxLen, p->x, acc_psi);
+            accelInterp(box_psi, N, BoxLen, p->x, acc_psi, grid_interp_order);
 
             /* Get the acceleration from the scalar potential phi */
             double acc_phi[3];
-            accelCIC(box_phi, N, BoxLen, p->x, acc_phi);
+            accelInterp(box_phi, N, BoxLen, p->x, acc_phi, grid_interp_order);
 
             /* Also fetch the time derivative of phi at the particle position */
-            double phi_dot = gridCIC(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+            double phi_dot = gridInterp(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
             double phi_dot_c2 = phi_dot * inv_c2;
 
             /* Inner product of v_i with acc_phi */

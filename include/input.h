@@ -71,6 +71,7 @@ struct params {
     double ScaleFactorStep;
     double RecomputeTrigger;
     double RecomputeScaleRef;
+    char InterpolationOrder;
 
     /* Alternative Equation of Motion Mode */
     char AlternativeEquations;

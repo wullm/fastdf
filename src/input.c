@@ -28,6 +28,9 @@ int initParams(struct params *pars) {
     /* Initialize the struct to zero */
     memset(pars, 0, sizeof(struct params));
 
+    /* Set important non-zero default parameters */
+    pars->InterpolationOrder = 2; // CIC
+
     /* Allocate memory for string parameters */
     int len = DEFAULT_STRING_LENGTH;
     pars->OutputDirectory = malloc(len);
@@ -77,6 +80,9 @@ int readParams(struct params *pars, const char *fname) {
     pars->RecomputeTrigger = ini_getd("Simulation", "RecomputeTrigger", 0.01, fname);
     pars->RecomputeScaleRef = ini_getd("Simulation", "RecomputeScaleRef", 0.0, fname);
     pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
+
+    /* Interpolation order (1 = NGP, 2 = CIC). Default = CIC */
+    pars->InterpolationOrder = ini_getl("Simulation", "InterpolationOrder", 2, fname);
 
     /* Parameters for the white noise field box */
     pars->InvertField = ini_getd("Box", "InvertField", 0, fname);
