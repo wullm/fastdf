@@ -11,7 +11,7 @@ fastdf_SOURCES = src/mesh_grav.c src/fft.c src/cosmology.c src/header.c src/inpu
 fastdf_CFLAGS = $(AM_CFLAGS)
 
 if WITH_CLASS
-fastdf_SOURCES += src/classex_legacy.c
+fastdf_SOURCES += src/classex.c
 endif
 
 SUBDIRS = class
