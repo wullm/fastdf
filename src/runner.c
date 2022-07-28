@@ -160,16 +160,16 @@ long long run_fastdf(struct params *pars, struct units *us) {
     message(verbosity_low, "a_begin = %.3e (z = %.2f)\n", a_begin, 1./a_begin - 1);
     message(verbosity_low, "a_end = %.3e (z = %.2f)\n", a_end, 1./a_end - 1);
 
+    const char use_nonsymplectic_eom = pars->NonSymplecticEquations;
+    if (use_nonsymplectic_eom) {
+        message(verbosity_low, "Using non-symplectic equations of motion!\n");
+    }
+
     const char use_alternative_eom = pars->AlternativeEquations;
     if (use_alternative_eom) {
         message(verbosity_low, "\n\n");
         message(verbosity_low, "WARNING: Using alternative equations of motion!");
         message(verbosity_low, "\n\n");
-    }
-
-    const char use_nonsymplectic_eom = pars->NonSymplecticEquations;
-    if (use_nonsymplectic_eom) {
-        message(verbosity_low, "Using non-symplectic equations of motion!");
     }
 
     /* Read the Gaussian random field on each MPI rank */
