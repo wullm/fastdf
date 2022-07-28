@@ -33,6 +33,7 @@ can be supplied. These can be pre-generated with [classex](https://github.com/wu
 Requirements
 ------------
 + GSL
++ FFTW
 + HDF5
 + MPI
 + CLASS (optional)
