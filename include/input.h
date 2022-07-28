@@ -76,6 +76,9 @@ struct params {
     /* Alternative Equation of Motion Mode */
     char AlternativeEquations;
 
+    /* Use non-symplectic formulation of equations of motion */
+    char NonSymplecticEquations;
+
     /* Output parameters */
     char *OutputDirectory;
     char *OutputFilename;

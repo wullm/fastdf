@@ -167,6 +167,11 @@ long long run_fastdf(struct params *pars, struct units *us) {
         message(verbosity_low, "\n\n");
     }
 
+    const char use_nonsymplectic_eom = pars->NonSymplecticEquations;
+    if (use_nonsymplectic_eom) {
+        message(verbosity_low, "Using non-symplectic equations of motion!");
+    }
+
     /* Read the Gaussian random field on each MPI rank */
     double *box;
     double BoxLen = 0;
@@ -715,36 +720,55 @@ long long run_fastdf(struct params *pars, struct units *us) {
             double acc_phi[3];
             accelInterp(box_phi, N, BoxLen, p->x, acc_phi, grid_interp_order);
 
-            /* Also fetch the value of the potential at the particle position */
-            double psi = gridInterp(box_psi, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
-            double phi = gridInterp(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
-            double psi_c2 = psi * inv_c2;
-            double phi_c2 = phi * inv_c2;
-
             /* Also fetch the time derivative of phi at the particle position */
             double phi_dot = gridInterp(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
             double phi_dot_c2 = phi_dot * inv_c2;
 
-            /* Inner product of v_i with acc_phi */
-            double vacx = p->v_i[0] * acc_phi[0];
-            double vacy = p->v_i[1] * acc_phi[1];
-            double vacz = p->v_i[2] * acc_phi[2];
+            /* The momentum vector & length to be used in the kick equation */
+            double *q_vec, q_mag;
+
+            if (use_nonsymplectic_eom) {
+                /* Use the current momentum for the non-symplectic version */
+                q_vec = p->v;
+                q_mag = hypot3(p->v[0], p->v[1], p->v[2]);
+            } else {
+                /* Use the initial momentum for the symplectic formulation */
+                q_vec = p->v_i;
+                q_mag = p->v_i_mag;
+            }
+
+            /* Inner product of momentum with acc_phi */
+            double vacx = q_vec[0] * acc_phi[0];
+            double vacy = q_vec[1] * acc_phi[1];
+            double vacz = q_vec[2] * acc_phi[2];
             double vac = vacx + vacy + vacz;
 
             /* Compute the relativistic correction factors */
-            double q = p->v_i_mag;
-            double q2 = q * q;
-            double epsfac = hypot(q, a * m_eV);
+            double q2 = q_mag * q_mag;
+            double epsfac = hypot(q_mag, a * m_eV);
             double epsfac_inv = 1. / epsfac;
 
             /* Compute kick and drift factors */
             double kick_psi = epsfac * inv_c;
             double kick_phi = epsfac_inv * inv_c;
-            double drift = epsfac_inv * (1.0 + psi_c2 + phi_c2) * c;
+            double drift = epsfac_inv * c;
+
+            if (use_nonsymplectic_eom) {
+                /* Fetch the value of the potential at the particle position */
+                double psi = gridInterp(box_psi, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
+                double phi = gridInterp(box_phi, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
+                double psi_c2 = psi * inv_c2;
+                double phi_c2 = phi * inv_c2;
+
+                /* Apply the non-symplectic relativistic drift factor */
+                if (use_alternative_eom) {
+                    drift *= (1.0 + psi_c2 + phi_c2 * (2.0 - q2 * epsfac_inv * epsfac_inv));
+                } else {
+                    drift *= (1.0 + psi_c2 + phi_c2);
+                }
+            }
 
             if (use_alternative_eom) {
-                /* Alternative drift */
-                drift = epsfac_inv * (1.0 + psi_c2 + phi_c2 * (2.0 - q2 * epsfac_inv * epsfac_inv)) * c;
                 /* Zero out the anti-symmetric term */
                 vac = 0.;
                 /* Zero out the potential derivative term */
@@ -757,14 +781,14 @@ long long run_fastdf(struct params *pars, struct units *us) {
             p->v[2] -= acc_psi[2] * kick_psi * dtau1;
 
             /* Add anti-symmetric gradient term (only rotates) */
-            p->v[0] -= (q2 * acc_phi[0] - p->v_i[0] * vac) * kick_phi * dtau1;
-            p->v[1] -= (q2 * acc_phi[1] - p->v_i[1] * vac) * kick_phi * dtau1;
-            p->v[2] -= (q2 * acc_phi[2] - p->v_i[2] * vac) * kick_phi * dtau1;
+            p->v[0] -= (q2 * acc_phi[0] - q_vec[0] * vac) * kick_phi * dtau1;
+            p->v[1] -= (q2 * acc_phi[1] - q_vec[1] * vac) * kick_phi * dtau1;
+            p->v[2] -= (q2 * acc_phi[2] - q_vec[2] * vac) * kick_phi * dtau1;
 
             /* Add potential derivative term */
-            p->v[0] += p->v_i[0] * phi_dot_c2 * dtau1;
-            p->v[1] += p->v_i[1] * phi_dot_c2 * dtau1;
-            p->v[2] += p->v_i[2] * phi_dot_c2 * dtau1;
+            p->v[0] += q_vec[0] * phi_dot_c2 * dtau1;
+            p->v[1] += q_vec[1] * phi_dot_c2 * dtau1;
+            p->v[2] += q_vec[2] * phi_dot_c2 * dtau1;
 
             /* Execute drift (only one drift, so use dtau = dtau1 + dtau2) */
             p->x[0] += p->v[0] * drift * dtau;
@@ -796,16 +820,28 @@ long long run_fastdf(struct params *pars, struct units *us) {
             double phi_dot = gridInterp(box_phi_dot, N, BoxLen, p->x[0], p->x[1], p->x[2], grid_interp_order);
             double phi_dot_c2 = phi_dot * inv_c2;
 
-            /* Inner product of v_i with acc_phi */
-            double vacx = p->v_i[0] * acc_phi[0];
-            double vacy = p->v_i[1] * acc_phi[1];
-            double vacz = p->v_i[2] * acc_phi[2];
+            /* The momentum vector & length to be used in the kick equation */
+            double *q_vec, q_mag;
+
+            if (use_nonsymplectic_eom) {
+                /* Use the current momentum for the non-symplectic version */
+                q_vec = p->v;
+                q_mag = hypot3(p->v[0], p->v[1], p->v[2]);
+            } else {
+                /* Use the initial momentum for the symplectic formulation */
+                q_vec = p->v_i;
+                q_mag = p->v_i_mag;
+            }
+
+            /* Inner product of momentum with acc_phi */
+            double vacx = q_vec[0] * acc_phi[0];
+            double vacy = q_vec[1] * acc_phi[1];
+            double vacz = q_vec[2] * acc_phi[2];
             double vac = vacx + vacy + vacz;
 
             /* Compute the relativistic correction factors */
-            double q = p->v_i_mag;
-            double q2 = q * q;
-            double epsfac = hypot(q, a * m_eV);
+            double q2 = q_mag * q_mag;
+            double epsfac = hypot(q_mag, a * m_eV);
             double epsfac_inv = 1. / epsfac;
 
             /* Compute kick factors */
@@ -825,14 +861,14 @@ long long run_fastdf(struct params *pars, struct units *us) {
             p->v[2] -= acc_psi[2] * kick_psi * dtau2;
 
             /* Add anti-symmetric gradient term (only rotates) */
-            p->v[0] -= (q2 * acc_phi[0] - p->v_i[0] * vac) * kick_phi * dtau2;
-            p->v[1] -= (q2 * acc_phi[1] - p->v_i[1] * vac) * kick_phi * dtau2;
-            p->v[2] -= (q2 * acc_phi[2] - p->v_i[2] * vac) * kick_phi * dtau2;
+            p->v[0] -= (q2 * acc_phi[0] - q_vec[0] * vac) * kick_phi * dtau2;
+            p->v[1] -= (q2 * acc_phi[1] - q_vec[1] * vac) * kick_phi * dtau2;
+            p->v[2] -= (q2 * acc_phi[2] - q_vec[2] * vac) * kick_phi * dtau2;
 
             /* Add potential derivative term */
-            p->v[0] += p->v_i[0] * phi_dot_c2 * dtau2;
-            p->v[1] += p->v_i[1] * phi_dot_c2 * dtau2;
-            p->v[2] += p->v_i[2] * phi_dot_c2 * dtau2;
+            p->v[0] += q_vec[0] * phi_dot_c2 * dtau2;
+            p->v[1] += q_vec[1] * phi_dot_c2 * dtau2;
+            p->v[2] += q_vec[2] * phi_dot_c2 * dtau2;
         }
 
         /* Step forward */

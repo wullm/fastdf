@@ -80,6 +80,7 @@ int readParams(struct params *pars, const char *fname) {
     pars->RecomputeTrigger = ini_getd("Simulation", "RecomputeTrigger", 0.01, fname);
     pars->RecomputeScaleRef = ini_getd("Simulation", "RecomputeScaleRef", 0.0, fname);
     pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
+    pars->NonSymplecticEquations = ini_getl("Simulation", "NonSymplecticEquations", 0, fname);
 
     /* Interpolation order (1 = NGP, 2 = CIC). Default = CIC */
     pars->InterpolationOrder = ini_getl("Simulation", "InterpolationOrder", 2, fname);
