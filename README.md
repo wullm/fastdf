@@ -30,7 +30,7 @@ Then check out the examples.
 
 To compile with CLASS, configure with the option --with-class=/path/to/class/.
 Alternatively, an HDF5 file with perturbation vectors (transfer functions)
-can be supplied. These can be pre-generated with [classex](https://github.com/wullm/classex)).
+can be supplied. These can be pre-generated with [classex](https://github.com/wullm/classex).
 
 Requirements
 ------------
