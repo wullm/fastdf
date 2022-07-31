@@ -6,9 +6,11 @@ perturbed phase-space distribution of cosmological relic neutrinos.
 
 The code initially samples particles from the perturbed phase-space
 distribution at high redshift and then evolves them forward by
-solving the geodesic equation in linear theory. This requires
-pre-computed transfer functions for the first-order metric perturbations,
-as well as the random phases field used to set up initial conditions.
+solving the geodesic equation in linear theory. The code uses a
+symplectic leapfrog integration scheme that explicitly preserves
+phase-space density. The integration requires pre-computed transfer
+functions for the first-order metric perturbations, as well as the
+random phases field used to set up initial conditions.
 
 The code can be compiled with CLASS, which then automatically provides
 the required transfer functions. It can also be run together with
@@ -39,3 +41,9 @@ Requirements
 + HDF5
 + MPI
 + CLASS (optional)
+
+Further reading
+---------------
+
+https://arxiv.org/abs/2010.07321
+https://arxiv.org/abs/2207.14256
