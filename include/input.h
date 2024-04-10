@@ -72,6 +72,7 @@ struct params {
     double RecomputeTrigger;
     double RecomputeScaleRef;
     char InterpolationOrder;
+    char UseExplicitTransferFunctionTitle;
 
     /* Alternative Equation of Motion Mode */
     char AlternativeEquations;

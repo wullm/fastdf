@@ -82,6 +82,9 @@ int readParams(struct params *pars, const char *fname) {
     pars->AlternativeEquations = ini_getl("Simulation", "AlternativeEquations", 0, fname);
     pars->NonSymplecticEquations = ini_getl("Simulation", "NonSymplecticEquations", 0, fname);
 
+    /* Perturbation vector parameters */
+    pars->UseExplicitTransferFunctionTitle = ini_getl("PerturbData", "UseExplicitTransferFunctionTitle", 0, fname); // use "pars->TransferFunctionDensity"; otherwise use the format "d_ncdm[i]"
+
     /* Interpolation order (1 = NGP, 2 = CIC). Default = CIC */
     pars->InterpolationOrder = ini_getl("Simulation", "InterpolationOrder", 2, fname);
 

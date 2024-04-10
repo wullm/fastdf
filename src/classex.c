@@ -34,19 +34,41 @@ int readPerturbData(struct perturb_data *data, struct units *us,
     size_t k_size = pt->k_size[index_md];
     size_t tau_size = pt->tau_size;
 
+    /* The number of massive neutrino species */
+    const int N_nu = ba->N_ncdm;
+
     /* The vectors to be transfered from the CLASS structs to the data struct */
 
 #ifdef delta_shift_Nb_defined // do we have additional N-body transfer functions?
-    const int NumDesiredFunctions = 7;
-    int ClassPerturbIndices[7] = {pt->index_tp_phi, pt->index_tp_psi, pt->index_tp_delta_ncdm1, pt->index_tp_h_prime, pt->index_tp_eta_prime, pt->index_tp_H_T_Nb_prime, pt->index_tp_delta_shift_Nb_m};
-    int ClassBackgroundIndices[7] = {-1, -1, ba->index_bg_rho_ncdm1, -1, -1, -1, -1};
-    char DesiredFunctions[7][50] = {"phi", "psi", "d_ncdm[0]", "h_prime", "eta_prime", "H_T_Nb_prime", "delta_shift_Nb_m"};
+    const int BaseNumDesiredFunctions = 6;
+    int BaseClassPerturbIndices[6] = {pt->index_tp_phi, pt->index_tp_psi, pt->index_tp_h_prime, pt->index_tp_eta_prime, pt->index_tp_H_T_Nb_prime, pt->index_tp_delta_shift_Nb_m};
+    int BaseClassBackgroundIndices[6] = {-1, -1, -1, -1, -1, -1};
+    char BaseDesiredFunctions[6][50] = {"phi", "psi", "h_prime", "eta_prime", "H_T_Nb_prime", "delta_shift_Nb_m"};
 #else
-    const int NumDesiredFunctions = 3;
-    int ClassPerturbIndices[3] = {pt->index_tp_phi, pt->index_tp_psi, pt->index_tp_delta_ncdm1};
-    int ClassBackgroundIndices[3] = {-1, -1, ba->index_bg_rho_ncdm1};
-    char DesiredFunctions[3][50] = {"phi", "psi", "d_ncdm[0]"};
+    const int BaseNumDesiredFunctions = 2;
+    int BaseClassPerturbIndices[2] = {pt->index_tp_phi, pt->index_tp_psi};
+    int BaseClassBackgroundIndices[2] = {-1, -1};
+    char BaseDesiredFunctions[2][50] = {"phi", "psi"};
 #endif
+
+    const int NumDesiredFunctions = BaseNumDesiredFunctions + N_nu;
+    int ClassPerturbIndices[NumDesiredFunctions];
+    int ClassBackgroundIndices[NumDesiredFunctions];
+    char DesiredFunctions[NumDesiredFunctions][50];
+
+    /* Copy the base/standard transfer functions */
+    for (int i = 0; i < BaseNumDesiredFunctions; i++) {
+        ClassPerturbIndices[i] = BaseClassPerturbIndices[i];
+        ClassBackgroundIndices[i] = BaseClassBackgroundIndices[i];
+        sprintf(DesiredFunctions[i], "%s", BaseDesiredFunctions[i]);
+    }
+
+    /* We also want to read all the neutrino transfer functions */
+    for (int i = 0; i < N_nu; i++) {
+        ClassPerturbIndices[BaseNumDesiredFunctions + i] = pt->index_tp_delta_ncdm1 + i;
+        ClassBackgroundIndices[BaseNumDesiredFunctions + i] = ba->index_bg_rho_ncdm1 + i;
+        sprintf(DesiredFunctions[BaseNumDesiredFunctions + i], "d_ncdm[%d]", i);
+    }
 
     /* The number of transfer functions to be read */
     const size_t n_functions = NumDesiredFunctions;

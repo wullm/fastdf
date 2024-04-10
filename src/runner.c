@@ -107,10 +107,20 @@ long long run_fastdf(struct params *pars, struct units *us) {
     const double H_0 = h * 100 * KM_METRES / MPC_METRES * us->UnitTimeSeconds;
     const double rho_crit = 3.0 * H_0 * H_0 / (8. * M_PI * us->GravityG);
 
+    header(verbosity_low, "Neutrino species");
+
     /* Package physical constants */
-    const double m_eV = ptpars.M_ncdm_eV[0];
-    const double T_nu = ptpars.T_ncdm[0] * ptpars.T_CMB;
-    const double T_eV = T_nu * us->kBoltzmann / us->ElectronVolt;
+    const int N_nu = ptpars.N_ncdm;
+    double m_eV[N_nu];
+    double T_nu[N_nu];
+    double T_eV[N_nu];
+    for (int i = 0; i < N_nu; i++) {
+        m_eV[i] = ptpars.M_ncdm_eV[i];
+        T_nu[i] = ptpars.T_ncdm[i] * ptpars.T_CMB;
+        T_eV[i] = T_nu[i] * us->kBoltzmann / us->ElectronVolt;
+
+        message(verbosity_low, "[%d] (m, T) = (%g eV, %g K)\n", i, m_eV[i], T_nu[i]);
+    }
 
     /* Retrieve further physical constant */
     const double c = us->SpeedOfLight;
@@ -289,14 +299,6 @@ long long run_fastdf(struct params *pars, struct units *us) {
     /* Make a copy of the complex Gaussian random field */
     memcpy(fgrf, fbox, N*N*N*sizeof(fftw_complex));
 
-    /* Find the relevant density title among the transfer functions */
-    char *title = pars->TransferFunctionDensity;
-    int index_src = findTitle(ptdat.titles, title, ptdat.n_functions);
-    if (index_src < 0) {
-        printf("Error: transfer function '%s' not found (%d).\n", title, index_src);
-        return 1;
-    }
-
     /* If we are outputting in N-body gauge, check that all the necessary
      * transfer functions are there before doing the integrtion. */
     if (gauge_Nbody) {
@@ -304,11 +306,9 @@ long long run_fastdf(struct params *pars, struct units *us) {
         int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
         int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
         int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
-        int index_ncdm = findTitle(ptdat.titles, title, ptdat.n_functions);
         int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
-        if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 ||
-            index_ncdm < 0 || index_HTNbp < 0) {
-            printf("Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
+        if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 || index_HTNbp < 0) {
+            printf("Error: required transfer function not found (%d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_HTNbp);
             return 1;
         }
     }
@@ -316,15 +316,29 @@ long long run_fastdf(struct params *pars, struct units *us) {
     /* The index of the present day, corresponds to the last index in the array */
     int today_index = ptdat.tau_size - 1;
 
-    /* Find the present-day density, as fraction of the critical density */
+    /* Find the present-day density for each neutrino species, as fraction of the critical density */
     const double box_vol = BoxLen * BoxLen * BoxLen;
-    const double Omega = ptdat.Omega[ptdat.tau_size * index_src + today_index];
-    const double rho = Omega * rho_crit;
-    const double particle_mass = rho * box_vol / pars->NumPartGenerate;
+    double particle_mass[N_nu];
+    for (int i = 0; i < N_nu; i++) {
+        /* Generate the title */
+        char *title = malloc(DEFAULT_STRING_LENGTH);
+        if (pars->UseExplicitTransferFunctionTitle) {
+            title = pars->TransferFunctionDensity;
+        } else {
+            sprintf(title, "d_ncdm[%d]", i);
+        }
 
-    header(verbosity_high, "Mass factors");
-    message(verbosity_high, "Neutrino mass is %f eV\n", m_eV);
-    message(verbosity_low, "Particle mass is %f U_M\n", particle_mass);
+        int index_src = findTitle(ptdat.titles, title, ptdat.n_functions);
+        if (index_src < 0) {
+            printf("Error: required transfer function not found '%s' (%d).\n", title, index_src);
+            return 1;
+        }
+        free(title);
+
+        const double Omega = ptdat.Omega[ptdat.tau_size * index_src + today_index];
+        const double rho = Omega * rho_crit;
+        particle_mass[i] = rho * box_vol / pars->NumPartGenerate;
+    }
 
     /* Store the Box Length */
     pars->BoxLen = BoxLen;
@@ -434,12 +448,15 @@ long long run_fastdf(struct params *pars, struct units *us) {
         /* Set the ID of the particle */
         uint64_t id = i + firstID;
 
+        /* We cycle through the neutrino species based on the seed */
+        int i_ncdm = id % N_nu;
+
         /* Generate random particle velocity and position */
-        init_neutrino_particle(id, m_eV, p->v, p->x, &p->mass, BoxLen, us, T_eV);
+        init_neutrino_particle(id, m_eV[i_ncdm], p->v, p->x, &p->mass, BoxLen, us, T_eV[i_ncdm]);
 
         /* Compute the momentum in eV */
-        const double p_eV = fermi_dirac_momentum(p->v, m_eV, us->SpeedOfLight);
-        const double f_i = fermi_dirac_density(p_eV, T_eV);
+        const double p_eV = fermi_dirac_momentum(p->v, m_eV[i_ncdm], us->SpeedOfLight);
+        const double f_i = fermi_dirac_density(p_eV, T_eV[i_ncdm]);
 
         if (i==0)
         message(verbosity_low, "First random momentum = %e eV\n", p_eV);
@@ -460,7 +477,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
         p->v[2] *= 1.0 + deltaT;
 
         /* The current energy */
-        double eps_eV = hypot(p_eV/a_begin, m_eV);
+        double eps_eV = hypot(p_eV/a_begin, m_eV[i_ncdm]);
 
         /* Apply the velocity perturbation */
         p->v[0] += vel[0] * inv_c * eps_eV * a_begin;
@@ -712,6 +729,10 @@ long long run_fastdf(struct params *pars, struct units *us) {
         for (long long i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
+            /* We cycle through the neutrino species based on the seed */
+            uint64_t id = i + firstID;
+            int i_ncdm = id % N_nu;
+
             /* Get the acceleration from the scalar potential psi */
             double acc_psi[3];
             accelInterp(box_psi, N, BoxLen, p->x, acc_psi, grid_interp_order);
@@ -745,7 +766,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
             /* Compute the relativistic correction factors */
             double q2 = q_mag * q_mag;
-            double epsfac = hypot(q_mag, a * m_eV);
+            double epsfac = hypot(q_mag, a * m_eV[i_ncdm]);
             double epsfac_inv = 1. / epsfac;
 
             /* Compute kick and drift factors */
@@ -808,6 +829,10 @@ long long run_fastdf(struct params *pars, struct units *us) {
         for (long long i=0; i<localParticleNumber; i++) {
             struct particle_ext *p = &genparts[i];
 
+            /* We cycle through the neutrino species based on the seed */
+            uint64_t id = i + firstID;
+            int i_ncdm = id % N_nu;
+
             /* Get the acceleration from the scalar potential psi */
             double acc_psi[3];
             accelInterp(box_psi, N, BoxLen, p->x, acc_psi, grid_interp_order);
@@ -841,7 +866,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
             /* Compute the relativistic correction factors */
             double q2 = q_mag * q_mag;
-            double epsfac = hypot(q_mag, a * m_eV);
+            double epsfac = hypot(q_mag, a * m_eV[i_ncdm]);
             double epsfac_inv = 1. / epsfac;
 
             /* Compute kick factors */
@@ -885,8 +910,12 @@ long long run_fastdf(struct params *pars, struct units *us) {
             for (long long i=0; i<localParticleNumber; i+=weight_compute_invfreq) {
                 struct particle_ext *p = &genparts[i];
 
-                double p_eV = fermi_dirac_momentum(p->v, m_eV, c);
-                double f = fermi_dirac_density(p_eV, T_eV);
+                /* We cycle through the neutrino species based on the seed */
+                uint64_t id = i + firstID;
+                int i_ncdm = id % N_nu;
+
+                double p_eV = fermi_dirac_momentum(p->v, m_eV[i_ncdm], c);
+                double f = fermi_dirac_density(p_eV, T_eV[i_ncdm]);
                 double w = (p->f_i - f)/p->f_i;
                 I_df += w*w;
             }
@@ -917,176 +946,197 @@ long long run_fastdf(struct params *pars, struct units *us) {
         double *box_dshift = malloc(N*N*N*sizeof(double));
         double *box_tshift = malloc(N*N*N*sizeof(double));
 
-        header(verbosity_low, "Generating N-body gauge transformation grid");
+        header(verbosity_low, "Generating N-body gauge transformation grid(s)");
 
-        /* Compute the isentropic ratio and equation of state at a_end */
-        const double isen_ncdm = ncdm_isentropic_ratio(a_end, m_eV, T_eV);
-        const double w_ncdm = ncdm_equation_of_state(a_end, m_eV, T_eV);
-        message(verbosity_low, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, a_end);
-        message(verbosity_low, "Equation of state = %f at a_end = %e\n", w_ncdm, a_end);
+        /* We do this for each neutrino species separately */
+        for (int i_ncdm = 0; i_ncdm < N_nu; i_ncdm++) {
 
-        {
-            /* Final time at which to execute the gauge transformation */
-            double z_end = 1./a_end - 1;
-            double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
+            message(verbosity_low, "Working on species %d/%d\n", i_ncdm, N_nu);
 
-            /* Central difference */
-            double a_min = a_end / 1.001;
-            double z_min =  1./a_min - 1;
-            double log_tau_min = perturbLogTauAtRedshift(&spline, z_min);
-            double a_plus = a_end * 1.001;
-            double z_plus =  1./a_plus - 1;
-            double log_tau_plus = perturbLogTauAtRedshift(&spline, z_plus);
+            /* Compute the isentropic ratio and equation of state at a_end */
+            const double isen_ncdm = ncdm_isentropic_ratio(a_end, m_eV[i_ncdm], T_eV[i_ncdm]);
+            const double w_ncdm = ncdm_equation_of_state(a_end, m_eV[i_ncdm], T_eV[i_ncdm]);
+            message(verbosity_low, "Isentropic ratio = %f at a_end = %e\n", isen_ncdm, a_end);
+            message(verbosity_low, "Equation of state = %f at a_end = %e\n", w_ncdm, a_end);
 
-            /* Find the interpolation index along the time dimension */
-            int tau_index; //greatest lower bound bin index
-            double u_tau; //spacing between subsequent bins
-            perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
+            {
+                /* Final time at which to execute the gauge transformation */
+                double z_end = 1./a_end - 1;
+                double log_tau_end = perturbLogTauAtRedshift(&spline, z_end);
 
-            /* The indices of the necessary transfer function */
-            int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
-            int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
-            int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
-            int index_ncdm = findTitle(ptdat.titles, title, ptdat.n_functions);
-            int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
-            if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 ||
-                index_ncdm < 0 || index_HTNbp < 0) {
-                printf("Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
-                return 1;
+                /* Central difference */
+                double a_min = a_end / 1.001;
+                double z_min =  1./a_min - 1;
+                double log_tau_min = perturbLogTauAtRedshift(&spline, z_min);
+                double a_plus = a_end * 1.001;
+                double z_plus =  1./a_plus - 1;
+                double log_tau_plus = perturbLogTauAtRedshift(&spline, z_plus);
+
+                /* Find the interpolation index along the time dimension */
+                int tau_index; //greatest lower bound bin index
+                double u_tau; //spacing between subsequent bins
+                perturbSplineFindTau(&spline, log_tau_end, &tau_index, &u_tau);
+
+                /* Generate the title */
+                char *title = malloc(DEFAULT_STRING_LENGTH);
+                if (pars->UseExplicitTransferFunctionTitle) {
+                    title = pars->TransferFunctionDensity;
+                } else {
+                    sprintf(title, "d_ncdm[%d]", i_ncdm);
+                }
+
+                /* The indices of the necessary transfer function */
+                int index_hdot = findTitle(ptdat.titles, "h_prime", ptdat.n_functions);
+                int index_etadot = findTitle(ptdat.titles, "eta_prime", ptdat.n_functions);
+                int index_Nbshift = findTitle(ptdat.titles, "delta_shift_Nb_m", ptdat.n_functions);
+                int index_ncdm = findTitle(ptdat.titles, title, ptdat.n_functions);
+                int index_HTNbp = findTitle(ptdat.titles, "H_T_Nb_prime", ptdat.n_functions);
+                if (index_hdot < 0 || index_etadot < 0 || index_Nbshift < 0 ||
+                    index_ncdm < 0 || index_HTNbp < 0) {
+                    printf("Error: required transfer function not found (%d, %d, %d, %d, %d).\n", index_hdot, index_etadot, index_Nbshift, index_ncdm, index_HTNbp);
+                    return 1;
+                }
+                free(title);
+
+                /* Package the perturbation theory interpolation spline parameters */
+                struct spline_params sp_hdot = {&spline, index_hdot, tau_index, u_tau};
+                struct spline_params sp_etadot = {&spline, index_etadot, tau_index, u_tau};
+                struct spline_params sp_Nbshift = {&spline, index_Nbshift, tau_index, u_tau};
+                struct spline_params sp_HTNbp = {&spline, index_HTNbp, tau_index, u_tau};
+
+                /* Allocate boxes for the complex terms needed for the gauge transformation */
+                fftw_complex *fbox_alpha = malloc(N*N*N*sizeof(fftw_complex));
+                fftw_complex *fbox_hdot = malloc(N*N*N*sizeof(fftw_complex));
+                fftw_complex *fbox_etadot = malloc(N*N*N*sizeof(fftw_complex));
+                fftw_complex *fbox_Nbshift = malloc(N*N*N*sizeof(fftw_complex));
+
+                /* Apply the transfer function (read only fgrf, output into fbox) */
+                fft_apply_kernel(fbox_hdot, fgrf, N, BoxLen, kernel_transfer_function, &sp_hdot);
+                fft_apply_kernel(fbox_etadot, fgrf, N, BoxLen, kernel_transfer_function, &sp_etadot);
+                fft_apply_kernel(fbox_Nbshift, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nbshift);
+
+                /* Compute alpha * k^2 = h_dot + 6 * eta_dot */
+                for (int i=0; i<N*N*(N/2+1); i++) {
+                    fbox_alpha[i] = fbox_hdot[i] + 6.0 * fbox_etadot[i];
+                }
+
+                /* Apply the inverse Poisson kernel -1/k^2 */
+                fft_apply_kernel(fbox_alpha, fbox_alpha, N, BoxLen, kernel_inv_poisson, NULL);
+
+                /* Free grids that are no longer needed */
+                free(fbox_hdot);
+                free(fbox_etadot);
+
+                /* Compute the conformal time derivative of the background density */
+                double Omega_nu = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
+                double Omega_nu_min = perturbDensityAtLogTau(&spline, log_tau_min, index_ncdm);
+                double Omega_nu_plus = perturbDensityAtLogTau(&spline, log_tau_plus, index_ncdm);
+
+                double H = perturbHubbleAtLogTau(&spline, log_tau_end);
+                double H_min = perturbHubbleAtLogTau(&spline, log_tau_min);
+                double H_plus = perturbHubbleAtLogTau(&spline, log_tau_plus);
+
+                double rho_crit_central = rho_crit * (H * H) / (H_0 * H_0);
+                double rho_crit_min = rho_crit * (H_min * H_min) / (H_0 * H_0);
+                double rho_crit_plus = rho_crit * (H_plus * H_plus) / (H_0 * H_0);
+
+                double rho_nu = Omega_nu * rho_crit_central;
+                double rho_nu_min = Omega_nu_min * rho_crit_min;
+                double rho_nu_plus = Omega_nu_plus * rho_crit_plus;
+
+                double dtau = exp(log_tau_plus) - exp(log_tau_min);
+                double rho_dot = (rho_nu_plus - rho_nu_min) / dtau;
+                double rho_dot_rho = rho_dot / rho_nu;
+                double rho_dot_rho_c4 = rho_dot_rho / (c * c * c * c);
+
+                /* Compute the total density gauge shift */
+                for (int i=0; i<N*N*N; i++) {
+                    fbox[i] = -0.5 * fbox_alpha[i] * rho_dot_rho_c4 - (1.0 + w_ncdm) * fbox_Nbshift[i];
+                }
+
+                /* Free grids that are no longer needed */
+                free(fbox_alpha);
+                free(fbox_Nbshift);
+
+                /* Fourier transform to real space */
+                fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box_dshift, FFTW_ESTIMATE);
+                fft_execute(c2r);
+                fft_normalize_c2r(box_dshift, N, BoxLen);
+                fftw_destroy_plan(c2r);
+
+                if (rank == 0 && pars->OutputFields) {
+                    char density_fname[50];
+                    sprintf(density_fname, "%s/gauge_dshift_%d.hdf5", pars->OutputDirectory, i_ncdm);
+                    writeFieldFile(box_dshift, N, BoxLen, density_fname);
+                }
+
+                /* Allocate new complex grid */
+                fftw_complex *fbox_HTNbp = malloc(N*N*N*sizeof(fftw_complex));
+
+                /* Apply the transfer function for H_T_Nb_prime */
+                fft_apply_kernel(fbox_HTNbp, fgrf, N, BoxLen, kernel_transfer_function, &sp_HTNbp);
+
+                /* Apply the inverse Poisson kernel -1/k^2 */
+                fft_apply_kernel(fbox_HTNbp, fbox_HTNbp, N, BoxLen, kernel_inv_poisson, NULL);
+
+                /* Fourier transform to real space */
+                fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox_HTNbp, box_tshift, FFTW_ESTIMATE);
+                fft_execute(c2r3);
+                fft_normalize_c2r(box_tshift, N, BoxLen);
+                fftw_destroy_plan(c2r3);
+
+                if (rank == 0 && pars->OutputFields) {
+                    char vshift_fname[50];
+                    sprintf(vshift_fname, "%s/gauge_vshift_%d.hdf5", pars->OutputDirectory, i_ncdm);
+                    writeFieldFile(box_tshift, N, BoxLen, vshift_fname);
+                }
+
+                /* Free the remaining complex grid */
+                free(fbox_HTNbp);
             }
 
-            /* Package the perturbation theory interpolation spline parameters */
-            struct spline_params sp_hdot = {&spline, index_hdot, tau_index, u_tau};
-            struct spline_params sp_etadot = {&spline, index_etadot, tau_index, u_tau};
-            struct spline_params sp_Nbshift = {&spline, index_Nbshift, tau_index, u_tau};
-            struct spline_params sp_HTNbp = {&spline, index_HTNbp, tau_index, u_tau};
+            message(verbosity_low, "Applying N-body gauge transformation to the particles of species %d.\n", i_ncdm);
 
-            /* Allocate boxes for the complex terms needed for the gauge transformation */
-            fftw_complex *fbox_alpha = malloc(N*N*N*sizeof(fftw_complex));
-            fftw_complex *fbox_hdot = malloc(N*N*N*sizeof(fftw_complex));
-            fftw_complex *fbox_etadot = malloc(N*N*N*sizeof(fftw_complex));
-            fftw_complex *fbox_Nbshift = malloc(N*N*N*sizeof(fftw_complex));
+            /* Perform the gauge transformation */
+            #pragma omp parallel for
+            for (long long i=0; i<localParticleNumber; i++) {
+                struct particle_ext *p = &genparts[i];
 
-            /* Apply the transfer function (read only fgrf, output into fbox) */
-            fft_apply_kernel(fbox_hdot, fgrf, N, BoxLen, kernel_transfer_function, &sp_hdot);
-            fft_apply_kernel(fbox_etadot, fgrf, N, BoxLen, kernel_transfer_function, &sp_etadot);
-            fft_apply_kernel(fbox_Nbshift, fgrf, N, BoxLen, kernel_transfer_function, &sp_Nbshift);
+                /* We cycle through the neutrino species based on the seed */
+                uint64_t id = i + firstID;
+                if (i_ncdm != id % N_nu) continue;
 
-            /* Compute alpha * k^2 = h_dot + 6 * eta_dot */
-            for (int i=0; i<N*N*(N/2+1); i++) {
-                fbox_alpha[i] = fbox_hdot[i] + 6.0 * fbox_etadot[i];
+                /* Determine the gauge shift at this point */
+                double delta = gridCIC(box_dshift, N, BoxLen, p->x[0], p->x[1], p->x[2]);
+
+                /* The equivalent temperature perturbation dT/T */
+                double deltaT = delta/isen_ncdm;
+
+                /* Determine the velocity shift at this point */
+                double vel[3];
+                accelCIC(box_tshift, N, BoxLen, p->x, vel);
+
+                /* Apply the density shift */
+                p->v[0] *= 1 - deltaT;
+                p->v[1] *= 1 - deltaT;
+                p->v[2] *= 1 - deltaT;
+
+                /* The current energy */
+                double p_eV = fermi_dirac_momentum(p->v, m_eV[i_ncdm], us->SpeedOfLight);
+                double eps_eV = hypot(p_eV/a_end, m_eV[i_ncdm]);
+
+                /* Apply the velocity shift */
+                p->v[0] += vel[0] * inv_c * eps_eV * a_end;
+                p->v[1] += vel[1] * inv_c * eps_eV * a_end;
+                p->v[2] += vel[2] * inv_c * eps_eV * a_end;
             }
-
-            /* Apply the inverse Poisson kernel -1/k^2 */
-            fft_apply_kernel(fbox_alpha, fbox_alpha, N, BoxLen, kernel_inv_poisson, NULL);
-
-            /* Free grids that are no longer needed */
-            free(fbox_hdot);
-            free(fbox_etadot);
-
-            /* Compute the conformal time derivative of the background density */
-            double Omega_nu = perturbDensityAtLogTau(&spline, log_tau_end, index_ncdm);
-            double Omega_nu_min = perturbDensityAtLogTau(&spline, log_tau_min, index_ncdm);
-            double Omega_nu_plus = perturbDensityAtLogTau(&spline, log_tau_plus, index_ncdm);
-
-            double H = perturbHubbleAtLogTau(&spline, log_tau_end);
-            double H_min = perturbHubbleAtLogTau(&spline, log_tau_min);
-            double H_plus = perturbHubbleAtLogTau(&spline, log_tau_plus);
-
-            double rho_crit_central = rho_crit * (H * H) / (H_0 * H_0);
-            double rho_crit_min = rho_crit * (H_min * H_min) / (H_0 * H_0);
-            double rho_crit_plus = rho_crit * (H_plus * H_plus) / (H_0 * H_0);
-
-            double rho_nu = Omega_nu * rho_crit_central;
-            double rho_nu_min = Omega_nu_min * rho_crit_min;
-            double rho_nu_plus = Omega_nu_plus * rho_crit_plus;
-
-            double dtau = exp(log_tau_plus) - exp(log_tau_min);
-            double rho_dot = (rho_nu_plus - rho_nu_min) / dtau;
-            double rho_dot_rho = rho_dot / rho_nu;
-            double rho_dot_rho_c4 = rho_dot_rho / (c * c * c * c);
-
-            /* Compute the total density gauge shift */
-            for (int i=0; i<N*N*N; i++) {
-                fbox[i] = -0.5 * fbox_alpha[i] * rho_dot_rho_c4 - (1.0 + w_ncdm) * fbox_Nbshift[i];
-            }
-
-            /* Free grids that are no longer needed */
-            free(fbox_alpha);
-            free(fbox_Nbshift);
-
-            /* Fourier transform to real space */
-            fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fbox, box_dshift, FFTW_ESTIMATE);
-            fft_execute(c2r);
-            fft_normalize_c2r(box_dshift, N, BoxLen);
-            fftw_destroy_plan(c2r);
-
-            if (rank == 0 && pars->OutputFields) {
-                char density_fname[50];
-                sprintf(density_fname, "%s/gauge_dshift.hdf5", pars->OutputDirectory);
-                writeFieldFile(box_dshift, N, BoxLen, density_fname);
-            }
-
-            /* Allocate new complex grid */
-            fftw_complex *fbox_HTNbp = malloc(N*N*N*sizeof(fftw_complex));
-
-            /* Apply the transfer function for H_T_Nb_prime */
-            fft_apply_kernel(fbox_HTNbp, fgrf, N, BoxLen, kernel_transfer_function, &sp_HTNbp);
-
-            /* Apply the inverse Poisson kernel -1/k^2 */
-            fft_apply_kernel(fbox_HTNbp, fbox_HTNbp, N, BoxLen, kernel_inv_poisson, NULL);
-
-            /* Fourier transform to real space */
-            fftw_plan c2r3 = fftw_plan_dft_c2r_3d(N, N, N, fbox_HTNbp, box_tshift, FFTW_ESTIMATE);
-            fft_execute(c2r3);
-            fft_normalize_c2r(box_tshift, N, BoxLen);
-            fftw_destroy_plan(c2r3);
-
-            if (rank == 0 && pars->OutputFields) {
-                char vshift_fname[50];
-                sprintf(vshift_fname, "%s/gauge_vshift.hdf5", pars->OutputDirectory);
-                writeFieldFile(box_tshift, N, BoxLen, vshift_fname);
-            }
-
-            /* Free the remaining complex grid */
-            free(fbox_HTNbp);
-        }
-
-        message(verbosity_low, "Applying N-body gauge transformation to the particles.\n");
-
-        /* Perform the gauge transformation */
-        #pragma omp parallel for
-        for (long long i=0; i<localParticleNumber; i++) {
-            struct particle_ext *p = &genparts[i];
-
-            /* Determine the gauge shift at this point */
-            double delta = gridCIC(box_dshift, N, BoxLen, p->x[0], p->x[1], p->x[2]);
-
-            /* The equivalent temperature perturbation dT/T */
-            double deltaT = delta/isen_ncdm;
-
-            /* Determine the velocity shift at this point */
-            double vel[3];
-            accelCIC(box_tshift, N, BoxLen, p->x, vel);
-
-            /* Apply the density shift */
-            p->v[0] *= 1 - deltaT;
-            p->v[1] *= 1 - deltaT;
-            p->v[2] *= 1 - deltaT;
-
-            /* The current energy */
-            double p_eV = fermi_dirac_momentum(p->v, m_eV, us->SpeedOfLight);
-            double eps_eV = hypot(p_eV/a_end, m_eV);
-
-            /* Apply the velocity shift */
-            p->v[0] += vel[0] * inv_c * eps_eV * a_end;
-            p->v[1] += vel[1] * inv_c * eps_eV * a_end;
-            p->v[2] += vel[2] * inv_c * eps_eV * a_end;
         }
 
         /* Free the gauge transformation boxes */
         free(box_dshift);
         free(box_tshift);
+
+        message(verbosity_low, "\n");
     }
 
     /* Free memory */
@@ -1102,16 +1152,20 @@ long long run_fastdf(struct params *pars, struct units *us) {
     for (long long i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
+        /* We cycle through the neutrino species based on the seed */
+        uint64_t id = i + firstID;
+        int i_ncdm = id % N_nu;
+
         /* Compute the energy & weight (needs to happen before converting the velocities!)*/
-        double p_eV = fermi_dirac_momentum(p->v, m_eV, us->SpeedOfLight);
-        double eps_eV = hypot(p_eV/a_end, m_eV);
-        double eps = particle_mass / m_eV * eps_eV;
-        double f = fermi_dirac_density(p_eV, T_eV);
+        double p_eV = fermi_dirac_momentum(p->v, m_eV[i_ncdm], us->SpeedOfLight);
+        double eps_eV = hypot(p_eV/a_end, m_eV[i_ncdm]);
+        double eps = particle_mass[i_ncdm] / m_eV[i_ncdm] * eps_eV;
+        double f = fermi_dirac_density(p_eV, T_eV[i_ncdm]);
         double w = (p->f_i - f)/p->f_i;
         // p->mass = particle_mass * w;
 
         energies[i] = eps;
-        masses[i] = particle_mass;
+        masses[i] = particle_mass[i_ncdm];
         weights[i] = w;
         phaseDensities[i] = p->f_i;
 
@@ -1127,15 +1181,19 @@ long long run_fastdf(struct params *pars, struct units *us) {
     for (long long i=0; i<localParticleNumber; i++) {
         struct particle_ext *p = &genparts[i];
 
+        /* We cycle through the neutrino species based on the seed */
+        uint64_t id = i + firstID;
+        int i_ncdm = id % N_nu;
+
         /* Ensure that particles wrap */
         p->x[0] = fwrap(p->x[0], BoxLen);
         p->x[1] = fwrap(p->x[1], BoxLen);
         p->x[2] = fwrap(p->x[2], BoxLen);
 
         /* Convert momenta to velocities */
-        p->v[0] *= c / m_eV;
-        p->v[1] *= c / m_eV;
-        p->v[2] *= c / m_eV;
+        p->v[0] *= c / m_eV[i_ncdm];
+        p->v[1] *= c / m_eV[i_ncdm];
+        p->v[2] *= c / m_eV[i_ncdm];
 
         /* Convert to peculiar velocities */
         p->v[0] /= a_end;
