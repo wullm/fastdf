@@ -337,7 +337,7 @@ long long run_fastdf(struct params *pars, struct units *us) {
 
         const double Omega = ptdat.Omega[ptdat.tau_size * index_src + today_index];
         const double rho = Omega * rho_crit;
-        particle_mass[i] = rho * box_vol / pars->NumPartGenerate;
+        particle_mass[i] = rho * box_vol / pars->NumPartGenerate * N_nu;
     }
 
     /* Store the Box Length */
