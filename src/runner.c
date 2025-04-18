@@ -58,9 +58,20 @@ long long run_fastdf(struct params *pars, struct units *us) {
     sprintf(out_fname, "%s", pars->OutputFilename);
 
     /* The file name for the current rank */
-    char out_fname_local[220];
+    char out_fname_local[240];
     if (pars->DistributedFiles && MPI_Rank_Count > 1) {
-        sprintf(out_fname_local, "%s.%d", out_fname, pars->rank);
+        const char *extension = strrchr(out_fname, '.');
+        if (!extension || extension == out_fname) {
+            /* no file extension */
+            sprintf(out_fname_local, "%s.%d", out_fname, pars->rank);
+        } else {
+            /* with file extension */
+            char basename[220];
+            int basename_str_len = extension - out_fname;
+            strncpy(basename, out_fname, basename_str_len);
+            basename[basename_str_len] = '\0';            
+            sprintf(out_fname_local, "%s.%d.%s", basename, pars->rank, extension + 1);
+        }
     } else {
         sprintf(out_fname_local, "%s", out_fname);
     }
